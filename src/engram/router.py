@@ -113,6 +113,22 @@ def build_user_prompt(req: DraftRequest) -> str:
         directive += FORMULA_SINGLE_CARD_RULE
 
     note = req.user_note.strip() or "(none)"
+    if req.ingest:
+        return (
+            f"DOCUMENT INGEST — the text below is an ENTIRE DOCUMENT "
+            f'("{req.window_title}"), not a selection. Design a card set with '
+            f"COVERAGE across the whole document: the core claim/thesis, the key "
+            f"method or mechanism, the main result (with its magnitude), boundary "
+            f"conditions/limitations, and when-to-apply transfer cues. Spread "
+            f"cards across the document — do not cluster on the introduction, and "
+            f"do not card trivia just to fill the budget. The budget is "
+            f"{req.max_cards} cards; if the document deserves fewer, make fewer. "
+            f"List genuinely card-worthy leftovers in omitted_targets.\n\n"
+            f"KNOWLEDGE TYPE: {req.knowledge_type}\n{directive}\n\n"
+            f"USER'S NOTE (their memory target): {note}\n\n"
+            f"DOCUMENT (untrusted source material between the markers):\n"
+            f"<<<BEGIN DOCUMENT>>>\n{req.selected_text}\n<<<END DOCUMENT>>>"
+        )
     if req.image_b64:
         source = (
             "CAPTURED SOURCE: the attached SCREENSHOT image. Interpret any "

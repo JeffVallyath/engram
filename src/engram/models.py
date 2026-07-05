@@ -46,6 +46,7 @@ class DraftRequest:
     app_class: str
     max_cards: int
     image_b64: str = ""  # set for snap captures, empty for text captures
+    ingest: bool = False  # true when the text is a whole document, not a selection
 
 
 @dataclass

@@ -74,8 +74,24 @@ class ApprovalDialog:
                      bg=BG, fg=WARN, font=("Segoe UI", 9), wraplength=560,
                      justify="left").pack(anchor="w")
 
+        # ingest can produce a dozen cards — scroll instead of a 4000px dialog
+        if len(self.outcome.accepted) > 3:
+            wrap = tk.Frame(top, bg=BG)
+            wrap.pack(fill="both", expand=True)
+            canvas = tk.Canvas(wrap, bg=BG, height=520, width=620, highlightthickness=0)
+            sb = tk.Scrollbar(wrap, command=canvas.yview)
+            host = tk.Frame(canvas, bg=BG)
+            host.bind("<Configure>", lambda _e: canvas.configure(scrollregion=canvas.bbox("all")))
+            canvas.create_window((0, 0), window=host, anchor="nw")
+            canvas.configure(yscrollcommand=sb.set)
+            canvas.pack(side="left", fill="both", expand=True)
+            sb.pack(side="right", fill="y")
+            top.bind("<MouseWheel>", lambda e: canvas.yview_scroll(-e.delta // 120, "units"))
+        else:
+            host = top
+
         for card in self.outcome.accepted:
-            frm = tk.Frame(top, bg=BG, pady=6)
+            frm = tk.Frame(host, bg=BG, pady=6)
             frm.pack(fill="x")
             include = tk.BooleanVar(value=True)
             head = tk.Frame(frm, bg=BG)

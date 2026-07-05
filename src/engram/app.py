@@ -343,6 +343,87 @@ def cli_anki_check(cfg: Config) -> int:
     return 0
 
 
+def cli_ingest(cfg: Config, args) -> int:
+    from dataclasses import replace as dc_replace
+
+    from .ingest import BUDGET_LIMIT, DEFAULT_BUDGET, IngestError, extract_text
+
+    client = make_client(cfg)
+    if client is None:
+        print("ingest needs an llm provider — set llm.provider to anthropic/openai "
+              "(or fake to try the flow) in ~/.engram/config.toml", file=sys.stderr)
+        return 2
+    try:
+        text = extract_text(args.ingest)
+    except IngestError as e:
+        print(f"ingest error: {e}", file=sys.stderr)
+        return 1
+
+    from pathlib import Path
+
+    budget = min(args.cards or DEFAULT_BUDGET, BUDGET_LIMIT)
+    req = DraftRequest(
+        knowledge_type=args.type,
+        selected_text=text,
+        user_note=args.note or "",
+        window_title=Path(args.ingest).name,
+        app_class="file",
+        max_cards=budget,
+        ingest=True,
+    )
+    print(f"drafting up to {budget} cards from {req.window_title} ({len(text):,} chars)...")
+
+    def draft(r):
+        try:
+            return draft_outcome(client, r, cfg)
+        except (LLMDraftError, MissingAPIKeyError) as e:
+            print(f"draft failed: {e}", file=sys.stderr)
+            raw = getattr(e, "raw_text", "")
+            if raw:
+                print(f"raw model output:\n{raw}", file=sys.stderr)
+            return None
+
+    outcome = draft(req)
+    if outcome is None:
+        return 1
+
+    if args.print:
+        if outcome.reject_reason:
+            print(f"NO CARD: {outcome.reject_reason}")
+        for card in outcome.accepted:
+            print(f"[{card.knowledge_type}/{card.note_format}] {card.why_this_card}")
+            print(f"  FRONT: {card.front}")
+            print(f"  BACK:  {card.back}")
+        for d in outcome.dropped:
+            print(f"dropped: {d.reason}")
+        if outcome.omitted:
+            print(f"omitted targets: {'; '.join(outcome.omitted)}")
+        return 0
+
+    # normal path: the same review gate as every other capture
+    from .ui.approval import ApprovalDialog
+
+    root = tk.Tk()
+    root.withdraw()
+    anki = AnkiClient(cfg.anki.url)
+
+    def open_dialog(r, oc):
+        def on_done(action, note=None):
+            if action == "revise":
+                r2 = dc_replace(r, user_note=note if note is not None else r.user_note)
+                oc2 = draft(r2)
+                if oc2 is not None:
+                    open_dialog(r2, oc2)
+                    return
+            root.quit()
+
+        ApprovalDialog(root, r, oc, anki, cfg, on_done)
+
+    open_dialog(req, outcome)
+    root.mainloop()
+    return 0
+
+
 def cli_capture_test(cfg: Config) -> int:
     import time
 
@@ -404,6 +485,8 @@ def main(argv=None) -> int:
     parser.add_argument("--note", help="memory-target note for --draft")
     parser.add_argument("--cards", type=int, help="max cards for --draft (default from config)")
     parser.add_argument("--provider", help="override llm.provider for this run (e.g. fake, manual)")
+    parser.add_argument("--ingest", metavar="FILE", help="draft a coverage card set from a pdf/txt/md file")
+    parser.add_argument("--print", action="store_true", help="with --ingest/--draft: console output, no review dialog")
     parser.add_argument("--anki-check", action="store_true", help="check AnkiConnect, deck, models and fields")
     parser.add_argument("--capture-test", action="store_true", help="print captures to the console")
     parser.add_argument("--ui-test", action="store_true", help="drive the UI with fake data (no Anki writes)")
@@ -430,6 +513,8 @@ def main(argv=None) -> int:
 
     if args.draft:
         return cli_draft(cfg, args)
+    if args.ingest:
+        return cli_ingest(cfg, args)
     if args.anki_check:
         return cli_anki_check(cfg)
     if args.capture_test:
