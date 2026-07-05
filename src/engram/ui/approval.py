@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import tkinter as tk
+from tkinter import ttk
 from typing import Callable
 
-from ..anki import AnkiClient, AnkiError, AnkiUnavailableError
+from ..anki import AnkiClient, AnkiError, AnkiUnavailableError, reconcile_deck
 from ..config import Config
 from ..models import CardDraft, DraftRequest, ValidationOutcome
 
@@ -61,11 +62,12 @@ class ApprovalDialog:
 
     def _draft_more(self):
         # keep the cards already on screen, draft the omitted ones, and merge
-        # them into one review so it all sends to anki in a single push
+        # them into one review so it all sends to anki in a single push. carry
+        # the deck the user chose so they don't have to re-pick it
         kept = self._collect()
         note = "Draft cards for these omitted targets: " + "; ".join(self.outcome.omitted)
         self.top.destroy()
-        self.on_done("draft_more", note, kept)
+        self.on_done("draft_more", note, (kept, self._chosen_deck()))
 
     def _build_cards(self, top):
         for w in self.outcome.warnings:
@@ -122,6 +124,8 @@ class ApprovalDialog:
             back.pack(fill="x")
             self.rows.append((include, front, back, card))
 
+        self._build_deck_row(top)
+
         self.status = tk.Label(top, text="", bg=BG, fg=DIM, font=("Segoe UI", 9),
                                wraplength=560, justify="left")
         self.status.pack(anchor="w", pady=(8, 4))
@@ -138,6 +142,43 @@ class ApprovalDialog:
         # ctrl+enter approves — plain enter is just a newline in the text
         # boxes, so no accidental submits mid-edit
         top.bind("<Control-Return>", lambda _e: self._confirm())
+
+    def _build_deck_row(self, top):
+        # ask anki what decks exist, default to the model's topic suggestion
+        # reconciled against them; the user can retarget or type a new path
+        existing = self.anki.deck_names_safe()
+        self._existing = set(existing)
+        default = reconcile_deck(self.outcome.suggested_deck, existing, self.cfg.anki.deck)
+
+        row = tk.Frame(top, bg=BG)
+        row.pack(anchor="w", pady=(8, 0), fill="x")
+        tk.Label(row, text="Deck:", bg=BG, fg=FG, font=("Segoe UI", 9, "bold")).pack(side="left")
+
+        values = sorted(existing)
+        if default not in self._existing:
+            values = [default] + values
+        self.deck_var = tk.StringVar(value=default)
+        combo = ttk.Combobox(row, textvariable=self.deck_var, values=values, width=44)
+        combo.pack(side="left", padx=6)
+
+        self.deck_hint = tk.Label(row, text="", bg=BG, font=("Segoe UI", 8))
+        self.deck_hint.pack(side="left")
+
+        def refresh_hint(*_):
+            v = self.deck_var.get().strip()
+            if not v:
+                self.deck_hint.configure(text="", fg=DIM)
+            elif v in self._existing:
+                self.deck_hint.configure(text="existing deck", fg=OK)
+            else:
+                self.deck_hint.configure(text="new deck — will be created", fg=WARN)
+
+        self.deck_var.trace_add("write", refresh_hint)
+        refresh_hint()
+
+    def _chosen_deck(self) -> str:
+        var = getattr(self, "deck_var", None)
+        return (var.get().strip() if var else "") or self.cfg.anki.deck
 
     def _collect(self) -> list[CardDraft]:
         cards = []
@@ -165,7 +206,8 @@ class ApprovalDialog:
             results = self.anki.add_cards(cards, self.cfg, self.request.app_class,
                                           self.request.window_title,
                                           image_b64=img or None,
-                                          image_mode=self.cfg.snap.attach_image)
+                                          image_mode=self.cfg.snap.attach_image,
+                                          deck=self._chosen_deck())
         except AnkiUnavailableError as e:
             self.status.configure(text=f"{e}\nStart Anki, then press Retry — your drafts are kept.", fg=ERR)
             self.send_btn.configure(text="Retry (Ctrl+Enter)")

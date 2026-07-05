@@ -68,6 +68,7 @@ def validate_drafts(draft: CardDraftList, cards_cfg: CardsConfig, max_cards: int
     warns = list(draft.warnings)
     if draft.reject_reason:
         return ValidationOutcome(accepted=[], warnings=warns, reject_reason=draft.reject_reason)
+    deck = draft.suggested_deck
 
     kept, dropped = [], []
     for card in draft.cards:
@@ -82,4 +83,4 @@ def validate_drafts(draft: CardDraftList, cards_cfg: CardsConfig, max_cards: int
         kept.append(card)
 
     return ValidationOutcome(accepted=kept, dropped=dropped, warnings=warns,
-                             omitted=list(draft.omitted_targets))
+                             omitted=list(draft.omitted_targets), suggested_deck=deck)

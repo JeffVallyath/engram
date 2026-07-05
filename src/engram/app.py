@@ -103,17 +103,19 @@ class App:
         # grab window info here, before the overlay takes over the screen
         self.q.put(SnapEvent(active_window_title(), active_app_class()))
 
-    def draft_worker(self, req: DraftRequest, carry=None):
+    def draft_worker(self, req: DraftRequest, carry=None, deck=None):
         try:
             outcome = draft_outcome(self.client, req, self.cfg)
             if carry:
                 # prepend the cards the user already approved, so the review
-                # holds the original set + the newly-drafted omitted ones
+                # holds the original set + the newly-drafted omitted ones, and
+                # keep the deck they already chose
                 outcome = ValidationOutcome(
                     accepted=carry + outcome.accepted,
                     dropped=outcome.dropped,
                     warnings=outcome.warnings,
                     omitted=outcome.omitted,
+                    suggested_deck=deck or outcome.suggested_deck,
                 )
             self.q.put(DraftReady(req, outcome))
         except LLMDraftError as e:
@@ -292,13 +294,14 @@ class App:
         def on_done(action, note=None, carry=None):
             self.busy = False
             if action == "draft_more":
-                # redraft the omitted targets, keeping the approved cards
+                # redraft the omitted targets, keeping the approved cards + deck
                 from dataclasses import replace as dc_replace
 
+                kept, deck = carry
                 req2 = dc_replace(req, user_note=note)
                 self.toast("Drafting omitted targets…")
                 threading.Thread(target=self.draft_worker, args=(req2,),
-                                 kwargs={"carry": carry}, daemon=True).start()
+                                 kwargs={"carry": kept, "deck": deck}, daemon=True).start()
                 return
             if action == "revise":
                 note = note if note is not None else req.user_note
@@ -422,6 +425,8 @@ def cli_draft(cfg: Config, args) -> int:
     if outcome.reject_reason:
         print(f"NO CARD: {outcome.reject_reason}")
         return 0
+    if outcome.suggested_deck:
+        print(f"suggested deck: {outcome.suggested_deck}")
     for card in outcome.accepted:
         print(f"[{card.knowledge_type}/{card.note_format}] {card.why_this_card}")
         print(f"  FRONT: {card.front}")
@@ -500,6 +505,8 @@ def cli_ingest(cfg: Config, args) -> int:
     if args.print:
         if outcome.reject_reason:
             print(f"NO CARD: {outcome.reject_reason}")
+        if outcome.suggested_deck:
+            print(f"suggested deck: {outcome.suggested_deck}")
         for card in outcome.accepted:
             print(f"[{card.knowledge_type}/{card.note_format}] {card.why_this_card}")
             print(f"  FRONT: {card.front}")
@@ -523,10 +530,12 @@ def cli_ingest(cfg: Config, args) -> int:
                 r2 = dc_replace(r, user_note=note if note is not None else r.user_note)
                 oc2 = draft(r2)
                 if oc2 is not None:
-                    if carry:  # draft_more: keep the approved cards, add the new
-                        oc2 = ValidationOutcome(accepted=carry + oc2.accepted,
+                    if carry:  # draft_more: keep the approved cards + deck, add the new
+                        kept, deck = carry
+                        oc2 = ValidationOutcome(accepted=kept + oc2.accepted,
                                                 dropped=oc2.dropped, warnings=oc2.warnings,
-                                                omitted=oc2.omitted)
+                                                omitted=oc2.omitted,
+                                                suggested_deck=deck or oc2.suggested_deck)
                     open_dialog(r2, oc2)
                     return
             root.quit()
@@ -566,8 +575,12 @@ def cli_ui_test(cfg: Config) -> int:
     from .ui.picker import TypePicker
 
     class DryRunAnki(AnkiClient):
-        def add_cards(self, cards, cfg_, app_class, window_title, image_b64=None, image_mode="first"):
-            return [(c, f"added (dry-run) {c.front[:40]!r}") for c in cards]
+        def deck_names_safe(self):
+            return ["Default", "Chess::Openings", "Biology"]
+
+        def add_cards(self, cards, cfg_, app_class, window_title, image_b64=None,
+                      image_mode="first", deck=None):
+            return [(c, f"added to {deck!r} (dry-run) {c.front[:40]!r}") for c in cards]
 
     root = tk.Tk()
     root.withdraw()

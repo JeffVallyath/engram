@@ -72,6 +72,12 @@ def test_system_prompt_encodes_card_craft():
     assert "yes/no" in prompt
 
 
+def test_system_prompt_asks_for_topic_deck():
+    prompt = build_system_prompt(2, 2)
+    assert "suggested_deck" in prompt
+    assert "::" in prompt  # deck-path hierarchy example
+
+
 def test_formula_single_card_prefers_applicability():
     single = build_user_prompt(make_request(knowledge_type="formula", max_cards=1))
     double = build_user_prompt(make_request(knowledge_type="formula", max_cards=2))

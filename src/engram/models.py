@@ -27,6 +27,8 @@ class CardDraftList(BaseModel):
     # card-worthy targets the model saw but didn't draft (kept under the
     # ceiling). empty = nothing else worth carding; non-empty = more exists
     omitted_targets: list[str] = Field(default_factory=list)
+    # topic deck path the model proposes for this set (e.g. "Chess::Openings")
+    suggested_deck: str = ""
 
     @model_validator(mode="after")
     def _check(self):
@@ -70,6 +72,7 @@ class ValidationOutcome:
     warnings: list[str] = field(default_factory=list)
     reject_reason: Optional[str] = None
     omitted: list[str] = field(default_factory=list)
+    suggested_deck: str = ""
 
 
 # stuff the background threads push onto the queue for the tk main loop

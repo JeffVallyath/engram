@@ -20,7 +20,7 @@ class FakeClient:
                 tags=["fake"],
                 why_this_card="fake offline draft (image)",
             )
-            return CardDraftList(cards=[card])
+            return CardDraftList(cards=[card], suggested_deck="Fake::Screenshots")
         if len(txt) < 15:
             return CardDraftList(
                 cards=[],
@@ -28,6 +28,7 @@ class FakeClient:
             )
 
         topic = " ".join(txt.split()[:6])
+        deck = "Fake::" + (" ".join(txt.split()[:2]).title() or "Misc")
         fmt = default_note_format(kt)
         if fmt == "cloze":
             card = CardDraft(
@@ -47,4 +48,4 @@ class FakeClient:
                 tags=["fake"],
                 why_this_card="fake offline draft (basic)",
             )
-        return CardDraftList(cards=[card])
+        return CardDraftList(cards=[card], suggested_deck=deck)

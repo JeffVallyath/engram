@@ -30,6 +30,17 @@ def sanitize_tag(tag: str) -> str:
     return TAG_JUNK_RE.sub("_", tag.strip())[:60].strip("_")
 
 
+def reconcile_deck(suggested: str, existing: list[str], default: str) -> str:
+    """Map the model's suggested deck onto reality: reuse an existing deck on an
+    exact (case-insensitive) match, otherwise keep the suggestion as a new deck.
+    No fuzzy matching — that's how unrelated cards get grouped together."""
+    s = (suggested or "").strip()
+    if not s:
+        return default
+    by_lower = {d.lower(): d for d in existing}
+    return by_lower.get(s.lower(), s)
+
+
 def build_tags(card: CardDraft, app_class: str, window_title: str, cfg: Config) -> list[str]:
     today = datetime.date.today().isoformat()
     tags = [
@@ -79,6 +90,15 @@ class AnkiClient:
     def deck_names(self):
         return self._invoke("deckNames")
 
+    def deck_names_safe(self) -> list[str]:
+        # for the review dialog: never raise, just return [] if anki is down
+        try:
+            if self._protocol is None:
+                self.connect()
+            return self.deck_names()
+        except AnkiError:
+            return []
+
     def ensure_deck(self, name):
         self._invoke("createDeck", deck=name)
 
@@ -105,7 +125,7 @@ class AnkiClient:
                     problems.append(f'model "{model}" has no field "{f}" (has: {", ".join(sorted(have))})')
         return problems
 
-    def _note(self, card: CardDraft, cfg: Config, tags: list[str], img_tag="") -> dict:
+    def _note(self, card: CardDraft, cfg: Config, tags: list[str], img_tag="", deck=None) -> dict:
         a = cfg.anki
         back = card.back + img_tag
         if card.note_format == "cloze":
@@ -113,7 +133,7 @@ class AnkiClient:
         else:
             model, fields = a.basic_model, {a.basic_front_field: card.front, a.basic_back_field: back}
         return {
-            "deckName": a.deck,
+            "deckName": deck or a.deck,
             "modelName": model,
             "fields": fields,
             "tags": tags,
@@ -121,12 +141,13 @@ class AnkiClient:
         }
 
     def add_cards(self, cards, cfg: Config, app_class: str, window_title: str,
-                  image_b64=None, image_mode="first"):
+                  image_b64=None, image_mode="first", deck=None):
         """The single write path to Anki — only ever called from the review
         dialog's confirm handler (tests enforce this)."""
+        deck = deck or cfg.anki.deck
         if self._protocol is None:
             self.connect()
-        self.ensure_deck(cfg.anki.deck)
+        self.ensure_deck(deck)
 
         img_tag = ""
         if image_b64 and image_mode != "none":
@@ -138,7 +159,7 @@ class AnkiClient:
         # leak the answers to its siblings in the same review session
         notes = [
             self._note(c, cfg, build_tags(c, app_class, window_title, cfg),
-                       img_tag if (image_mode == "all" or i == 0) else "")
+                       img_tag if (image_mode == "all" or i == 0) else "", deck=deck)
             for i, c in enumerate(cards)
         ]
         addable = self._invoke("canAddNotes", notes=notes)
