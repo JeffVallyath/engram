@@ -77,6 +77,28 @@ def test_full_flow_capture_to_anki():
     assert "engram::source_browser" in note["tags"]
 
 
+def test_draft_more_merges_kept_and_new_cards():
+    # the "draft omitted (keep these)" path: approved cards carry forward and
+    # the newly-drafted omitted cards are appended into one review set
+    from engram.models import CardDraft, ValidationOutcome
+
+    kept = [
+        CardDraft(knowledge_type="fact", note_format="basic", front=f"Q{i}?", back="a")
+        for i in range(20)
+    ]
+    new_draft = ValidationOutcome(accepted=[
+        CardDraft(knowledge_type="concept", note_format="basic", front="Why X?", back="because"),
+        CardDraft(knowledge_type="concept", note_format="basic", front="When Y?", back="then"),
+    ])
+    merged = ValidationOutcome(
+        accepted=kept + new_draft.accepted,
+        dropped=new_draft.dropped, warnings=new_draft.warnings, omitted=new_draft.omitted,
+    )
+    assert len(merged.accepted) == 22
+    assert merged.accepted[0].front == "Q0?"
+    assert merged.accepted[-1].front == "When Y?"
+
+
 def test_prompt_injection_in_capture_cannot_raise_card_count():
     """The trust hierarchy is enforced by the validators even if a model obeyed
     injected instructions: max_cards is a hard client-side ceiling."""

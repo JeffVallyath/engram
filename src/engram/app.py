@@ -103,9 +103,19 @@ class App:
         # grab window info here, before the overlay takes over the screen
         self.q.put(SnapEvent(active_window_title(), active_app_class()))
 
-    def draft_worker(self, req: DraftRequest):
+    def draft_worker(self, req: DraftRequest, carry=None):
         try:
-            self.q.put(DraftReady(req, draft_outcome(self.client, req, self.cfg)))
+            outcome = draft_outcome(self.client, req, self.cfg)
+            if carry:
+                # prepend the cards the user already approved, so the review
+                # holds the original set + the newly-drafted omitted ones
+                outcome = ValidationOutcome(
+                    accepted=carry + outcome.accepted,
+                    dropped=outcome.dropped,
+                    warnings=outcome.warnings,
+                    omitted=outcome.omitted,
+                )
+            self.q.put(DraftReady(req, outcome))
         except LLMDraftError as e:
             self.q.put(DraftFailed(req, str(e), e.raw_text))
         except MissingAPIKeyError as e:
@@ -279,8 +289,17 @@ class App:
 
         self.busy = True
 
-        def on_done(action, note=None):
+        def on_done(action, note=None, carry=None):
             self.busy = False
+            if action == "draft_more":
+                # redraft the omitted targets, keeping the approved cards
+                from dataclasses import replace as dc_replace
+
+                req2 = dc_replace(req, user_note=note)
+                self.toast("Drafting omitted targets…")
+                threading.Thread(target=self.draft_worker, args=(req2,),
+                                 kwargs={"carry": carry}, daemon=True).start()
+                return
             if action == "revise":
                 note = note if note is not None else req.user_note
                 if req.image_b64:
@@ -499,11 +518,15 @@ def cli_ingest(cfg: Config, args) -> int:
     anki = AnkiClient(cfg.anki.url)
 
     def open_dialog(r, oc):
-        def on_done(action, note=None):
-            if action == "revise":
+        def on_done(action, note=None, carry=None):
+            if action in ("revise", "draft_more"):
                 r2 = dc_replace(r, user_note=note if note is not None else r.user_note)
                 oc2 = draft(r2)
                 if oc2 is not None:
+                    if carry:  # draft_more: keep the approved cards, add the new
+                        oc2 = ValidationOutcome(accepted=carry + oc2.accepted,
+                                                dropped=oc2.dropped, warnings=oc2.warnings,
+                                                omitted=oc2.omitted)
                     open_dialog(r2, oc2)
                     return
             root.quit()

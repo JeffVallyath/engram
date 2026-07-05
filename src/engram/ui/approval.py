@@ -25,7 +25,7 @@ class ApprovalDialog:
         self.outcome = outcome
         self.anki = anki_client
         self.cfg = cfg
-        self.on_done = on_done  # called with ("closed"|"revise", note_or_None)
+        self.on_done = on_done  # ("closed"|"revise"|"draft_more", note, carry_cards)
         self.rows = []
         self.sent = False
 
@@ -58,6 +58,14 @@ class ApprovalDialog:
     def _revise(self, note=None):
         self.top.destroy()
         self.on_done("revise", note)
+
+    def _draft_more(self):
+        # keep the cards already on screen, draft the omitted ones, and merge
+        # them into one review so it all sends to anki in a single push
+        kept = self._collect()
+        note = "Draft cards for these omitted targets: " + "; ".join(self.outcome.omitted)
+        self.top.destroy()
+        self.on_done("draft_more", note, kept)
 
     def _build_cards(self, top):
         for w in self.outcome.warnings:
@@ -121,9 +129,8 @@ class ApprovalDialog:
         row = tk.Frame(top, bg=BG)
         row.pack(anchor="e")
         if self.outcome.omitted:
-            note = "Draft cards for these omitted targets: " + "; ".join(self.outcome.omitted)
-            tk.Button(row, text="Draft omitted targets",
-                      command=lambda: self._revise(note)).pack(side="left", padx=4)
+            tk.Button(row, text="Draft omitted (keep these)",
+                      command=self._draft_more).pack(side="left", padx=4)
         self.send_btn = tk.Button(row, text=f"Add to Anki [{self.cfg.anki.deck}]  (Ctrl+Enter)",
                                   command=self._confirm)
         self.send_btn.pack(side="left", padx=4)
@@ -176,4 +183,4 @@ class ApprovalDialog:
     def _close(self):
         if self.top.winfo_exists():
             self.top.destroy()
-        self.on_done("closed", None)
+        self.on_done("closed", None, None)
