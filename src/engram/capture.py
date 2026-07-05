@@ -15,16 +15,19 @@ import os
 import time
 from ctypes import wintypes
 
-import keyboard
 import pyperclip
+from pynput.keyboard import Controller, Key
 
 from .config import CaptureConfig
 from .models import CaptureResult
 
 log = logging.getLogger(__name__)
 
+kbd = Controller()
+
 CF_UNICODETEXT = 13
 PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+VK_MODIFIERS = (0x11, 0x10, 0x12)  # ctrl, shift, alt
 
 user32 = ctypes.windll.user32
 kernel32 = ctypes.windll.kernel32
@@ -93,10 +96,7 @@ def _wait_for_modifier_release(timeout=1.0):
     # land as ctrl+shift+c in the target app
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        try:
-            if not (keyboard.is_pressed("ctrl") or keyboard.is_pressed("shift") or keyboard.is_pressed("alt")):
-                return
-        except Exception:
+        if not any(user32.GetAsyncKeyState(vk) & 0x8000 for vk in VK_MODIFIERS):
             return
         time.sleep(0.01)
 
@@ -126,7 +126,9 @@ def capture_selection(cfg: CaptureConfig) -> CaptureResult | None:
 
     pyperclip.copy("")
     _wait_for_modifier_release()
-    keyboard.send("ctrl+c")
+    with kbd.pressed(Key.ctrl):
+        kbd.press("c")
+        kbd.release("c")
     txt = _poll_clipboard(cfg.clipboard_timeout_ms)
 
     if saved is not None:

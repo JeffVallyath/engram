@@ -275,7 +275,7 @@ def cli_anki_check(cfg: Config) -> int:
 
 
 def cli_capture_test(cfg: Config) -> int:
-    import keyboard as kb
+    import time
 
     from . import hotkey
     from .capture import capture_selection
@@ -290,8 +290,11 @@ def cli_capture_test(cfg: Config) -> int:
 
     hotkey.register(cfg.hotkey.combo, on_hot)
     print(f"capture test: select text anywhere and press {cfg.hotkey.combo} (Ctrl+C here to stop)")
-    kb.wait()
-    return 0
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        return 0
 
 
 def cli_ui_test(cfg: Config) -> int:
