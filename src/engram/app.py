@@ -26,6 +26,9 @@ from .models import (
     DraftFailed,
     DraftReady,
     DraftRequest,
+    IngestFailed,
+    IngestPickEvent,
+    IngestReady,
     QuitEvent,
     SnapEvent,
     ValidationOutcome,
@@ -118,6 +121,12 @@ class App:
                     self.handle_capture(ev.capture)
                 elif isinstance(ev, SnapEvent):
                     self.handle_snap(ev)
+                elif isinstance(ev, IngestPickEvent):
+                    self.pick_ingest_file()
+                elif isinstance(ev, IngestReady):
+                    self.ingest_picker(ev.text, ev.filename)
+                elif isinstance(ev, IngestFailed):
+                    messagebox.showerror("engram — ingest failed", ev.message)
                 elif isinstance(ev, DraftReady):
                     self.open_review(ev.request, ev.outcome)
                 elif isinstance(ev, DraftFailed):
@@ -197,6 +206,68 @@ class App:
         TypePicker(self.root, capture, on_submit, on_cancel, initial_note=initial_note,
                    initial_cards=initial_cards or self.cfg.llm.max_cards)
 
+    def pick_ingest_file(self):
+        from tkinter import filedialog
+
+        from .ingest import FILETYPES, IngestError, extract_text
+
+        if self.busy:
+            return
+        if self.client is None:
+            messagebox.showerror(
+                "engram", "Ingest needs an LLM provider — set llm.provider to "
+                "anthropic or openai in ~/.engram/config.toml.")
+            return
+        path = filedialog.askopenfilename(title="engram — ingest a file", filetypes=FILETYPES)
+        if not path:
+            return
+        self.toast("Reading file…")
+
+        def worker():
+            from pathlib import Path
+
+            try:
+                text = extract_text(path)
+            except IngestError as e:
+                self.q.put(IngestFailed(str(e)))
+                return
+            self.q.put(IngestReady(text, Path(path).name))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def ingest_picker(self, text: str, filename: str, initial_note="", initial_cards=None):
+        from .ingest import BUDGET_LIMIT, DEFAULT_BUDGET
+        from .ui.picker import TypePicker
+
+        if self.busy:
+            return
+        self.busy = True
+        capture = CaptureResult(
+            text=text, window_title=filename, app_class="file",
+            prior_clipboard_was_text=True,
+        )
+
+        def on_submit(kt, note, n):
+            req = DraftRequest(
+                knowledge_type=kt,
+                selected_text=text,
+                user_note=note,
+                window_title=filename,
+                app_class="file",
+                max_cards=n,
+                ingest=True,
+            )
+            log.info("ingest accepted: file=%s type=%s cards<=%d chars=%d",
+                     filename, kt, n, len(text))
+            self.toast(f"Drafting up to {n} cards from {filename}…")
+            threading.Thread(target=self.draft_worker, args=(req,), daemon=True).start()
+
+        def on_cancel():
+            self.busy = False
+
+        TypePicker(self.root, capture, on_submit, on_cancel, initial_note=initial_note,
+                   initial_cards=initial_cards or DEFAULT_BUDGET, max_limit=BUDGET_LIMIT)
+
     def open_review(self, req: DraftRequest, outcome: ValidationOutcome):
         from .ui.approval import ApprovalDialog
 
@@ -209,6 +280,10 @@ class App:
                 if req.image_b64:
                     self.snap_picker(SnapEvent(req.window_title, req.app_class),
                                      req.image_b64, initial_note=note, initial_cards=req.max_cards)
+                    return
+                if req.ingest:
+                    self.ingest_picker(req.selected_text, req.window_title,
+                                       initial_note=note, initial_cards=req.max_cards)
                     return
                 capture = CaptureResult(
                     text=req.selected_text,
@@ -250,7 +325,11 @@ class App:
         def quit_app(_icon, _item):
             self.q.put(QuitEvent())
 
+        def ingest_file(_icon, _item):
+            self.q.put(IngestPickEvent())
+
         menu = pystray.Menu(
+            pystray.MenuItem("Ingest a file…", ingest_file),
             pystray.MenuItem("Open config folder", open_config),
             pystray.MenuItem("Quit engram", quit_app),
         )

@@ -18,6 +18,7 @@ dependencies = [
     "requests>=2.31",
     "pydantic>=2.5",
     "pypdf>=4",
+    "python-docx>=1.1",
 ]
 
 [project.optional-dependencies]

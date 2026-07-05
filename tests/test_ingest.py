@@ -17,9 +17,16 @@ def test_missing_file_raises(tmp_path):
 
 
 def test_unsupported_extension_raises(tmp_path):
-    f = tmp_path / "deck.docx"
+    f = tmp_path / "song.mp3"
     f.write_text("x", encoding="utf-8")
     with pytest.raises(IngestError, match="unsupported"):
+        extract_text(str(f))
+
+
+def test_corrupt_docx_is_friendly_error(tmp_path):
+    f = tmp_path / "broken.docx"
+    f.write_text("this is not a real docx", encoding="utf-8")
+    with pytest.raises(IngestError, match="could not read"):
         extract_text(str(f))
 
 
@@ -28,6 +35,39 @@ def test_oversized_file_raises(tmp_path):
     f.write_text("x" * (MAX_CHARS + 1), encoding="utf-8")
     with pytest.raises(IngestError, match="limit"):
         extract_text(str(f))
+
+
+def test_docx_extract(tmp_path):
+    import docx
+
+    f = tmp_path / "doc.docx"
+    d = docx.Document()
+    d.add_paragraph("Interleaving beats blocking for confusable categories.")
+    d.save(str(f))
+    assert "confusable categories" in extract_text(str(f))
+
+
+def test_json_and_csv_read_as_text(tmp_path):
+    j = tmp_path / "data.json"
+    j.write_text('{"effect": "interleaving"}', encoding="utf-8")
+    assert "interleaving" in extract_text(str(j))
+    c = tmp_path / "data.csv"
+    c.write_text("condition,accuracy\ninterleaved,72.4\n", encoding="utf-8")
+    assert "72.4" in extract_text(str(c))
+
+
+def test_html_tags_stripped(tmp_path):
+    f = tmp_path / "page.html"
+    f.write_text(
+        "<html><head><style>body{color:red}</style></head>"
+        "<body><h1>Spacing &amp; interleaving</h1><script>alert(1)</script>"
+        "<p>fight different problems.</p></body></html>",
+        encoding="utf-8",
+    )
+    text = extract_text(str(f))
+    assert "Spacing & interleaving" in text
+    assert "fight different problems" in text
+    assert "<p>" not in text and "alert(1)" not in text and "color:red" not in text
 
 
 def test_blank_pdf_raises(tmp_path):

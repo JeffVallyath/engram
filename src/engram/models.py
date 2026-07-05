@@ -86,6 +86,22 @@ class SnapEvent:
 
 
 @dataclass
+class IngestPickEvent:
+    pass
+
+
+@dataclass
+class IngestReady:
+    text: str
+    filename: str
+
+
+@dataclass
+class IngestFailed:
+    message: str
+
+
+@dataclass
 class DraftReady:
     request: DraftRequest
     outcome: ValidationOutcome

@@ -4,12 +4,19 @@ approval-gated — a paper gets 12 cards by default, not 120)."""
 
 from __future__ import annotations
 
+import html as html_lib
+import re
 from pathlib import Path
 
 MAX_CHARS = 400_000  # roughly 100k tokens, far under the model limit but
                      # way past the point where a "card set" makes sense
 DEFAULT_BUDGET = 12
 BUDGET_LIMIT = 30
+
+FILETYPES = [
+    ("documents", "*.pdf *.docx *.txt *.md *.json *.csv *.htm *.html"),
+    ("all files", "*.*"),
+]
 
 
 class IngestError(Exception):
@@ -22,17 +29,36 @@ def extract_text(path: str) -> str:
         raise IngestError(f"file not found: {p}")
 
     ext = p.suffix.lower()
-    if ext in (".txt", ".md"):
+    if ext in (".txt", ".md", ".json", ".csv"):
         text = p.read_text(encoding="utf-8", errors="replace")
     elif ext == ".pdf":
         try:
             from pypdf import PdfReader
         except ImportError as e:
             raise IngestError('pdf ingest needs the "pypdf" package: pip install pypdf') from e
-        reader = PdfReader(str(p))
-        text = "\n".join(page.extract_text() or "" for page in reader.pages)
+        try:
+            reader = PdfReader(str(p))
+            text = "\n".join(page.extract_text() or "" for page in reader.pages)
+        except Exception as e:
+            raise IngestError(f"could not read {p.name} as a pdf: {e}") from e
+    elif ext == ".docx":
+        try:
+            import docx
+        except ImportError as e:
+            raise IngestError('docx ingest needs the "python-docx" package: pip install python-docx') from e
+        try:
+            d = docx.Document(str(p))
+            text = "\n".join(par.text for par in d.paragraphs)
+        except Exception as e:
+            raise IngestError(f"could not read {p.name} as a docx: {e}") from e
+    elif ext in (".html", ".htm"):
+        raw = p.read_text(encoding="utf-8", errors="replace")
+        raw = re.sub(r"<(script|style)[^>]*>.*?</\1>", " ", raw, flags=re.S | re.I)
+        text = html_lib.unescape(re.sub(r"<[^>]+>", " ", raw))
     else:
-        raise IngestError(f"unsupported file type {ext!r} — use .pdf, .txt or .md")
+        raise IngestError(
+            f"unsupported file type {ext!r} — use pdf, docx, txt, md, json, csv or html"
+        )
 
     if not text.strip():
         raise IngestError(f"no extractable text in {p.name} (scanned/image-only pdf?)")

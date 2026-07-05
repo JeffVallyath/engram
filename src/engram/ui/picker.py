@@ -31,13 +31,14 @@ CARDS_LIMIT = 5
 
 class TypePicker:
     def __init__(self, root, capture: CaptureResult, on_submit: Callable, on_cancel: Callable,
-                 initial_note="", initial_cards=2):
+                 initial_note="", initial_cards=2, max_limit=CARDS_LIMIT):
         self.on_submit = on_submit
         self.on_cancel = on_cancel
         self.picked = "auto"
         self.labels = {}
         self.hint_showing = False
-        self.cards_n = max(1, min(initial_cards, CARDS_LIMIT))
+        self.limit = max_limit
+        self.cards_n = max(1, min(initial_cards, max_limit))
 
         top = tk.Toplevel(root)
         self.top = top
@@ -133,7 +134,7 @@ class TypePicker:
             lbl.configure(fg=FG if t == kt else DIM, bg=ACCENT if t == kt else BG)
 
     def _bump_cards(self, delta):
-        self.cards_n = max(1, min(self.cards_n + delta, CARDS_LIMIT))
+        self.cards_n = max(1, min(self.cards_n + delta, self.limit))
         self.cards_lbl.configure(text=str(self.cards_n))
 
     def _place_near_pointer(self, root):
