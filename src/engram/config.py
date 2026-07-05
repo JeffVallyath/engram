@@ -39,6 +39,9 @@ cloze_extra_field = "Back Extra"
 clipboard_timeout_ms = 500
 tag_window_title = false
 
+[snap]
+attach_image = true          # put the screenshot on the back of snap cards
+
 [cards]
 front_max_chars = 200
 back_max_chars = 500
@@ -84,6 +87,11 @@ class CaptureConfig:
 
 
 @dataclass(frozen=True)
+class SnapConfig:
+    attach_image: bool = True
+
+
+@dataclass(frozen=True)
 class CardsConfig:
     front_max_chars: int = 200
     back_max_chars: int = 500
@@ -97,6 +105,7 @@ class Config:
     anki: AnkiConfig = field(default_factory=AnkiConfig)
     capture: CaptureConfig = field(default_factory=CaptureConfig)
     cards: CardsConfig = field(default_factory=CardsConfig)
+    snap: SnapConfig = field(default_factory=SnapConfig)
 
 
 def ensure_config_file(path: Path = CONFIG_PATH) -> Path:
@@ -156,5 +165,8 @@ def load_config(path: Path = CONFIG_PATH) -> Config:
             front_max_chars=int(cards_raw.get("front_max_chars", 200)),
             back_max_chars=int(cards_raw.get("back_max_chars", 500)),
             cloze_max_deletions=int(cards_raw.get("cloze_max_deletions", 2)),
+        ),
+        snap=SnapConfig(
+            attach_image=bool(raw.get("snap", {}).get("attach_image", True)),
         ),
     )

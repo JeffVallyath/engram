@@ -43,6 +43,11 @@ clipboard_timeout_ms = 500
 # Off by default; when on, the title is truncated and sanitized hard.
 tag_window_title = false
 
+[snap]
+# put the screenshot on the back of snap cards (recall first, then see the
+# original figure as the answer). set false for text-only cards.
+attach_image = true
+
 [cards]
 front_max_chars = 200
 back_max_chars = 500
