@@ -49,11 +49,11 @@ class OpenAIClient:
             ]
             if corrective:
                 msgs.append({"role": "user", "content": corrective})
+            # no max_tokens: let the api use the model's own output limit
             resp = self.sdk.chat.completions.create(
                 model=self.model,
                 messages=msgs,
                 response_format={"type": "json_object"},
-                max_tokens=output_budget(req.max_cards),
             )
             return resp.choices[0].message.content or ""
 

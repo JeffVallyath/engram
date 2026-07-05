@@ -32,8 +32,9 @@ CORRECTIVE_MESSAGE = (
 
 def output_budget(max_cards: int) -> int:
     # the reply must fit N cards of JSON plus the model's thinking tokens —
-    # a fixed 2048 silently truncated everything above ~5 cards
-    return min(3000 + 600 * max_cards, 16000)
+    # a fixed 2048 silently truncated everything above ~5 cards. worst-case
+    # cap is the model's own output limit, not an artificial one
+    return min(3000 + 600 * max_cards, 128_000)
 
 
 def strip_fences(text: str) -> str:

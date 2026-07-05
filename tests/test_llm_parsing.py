@@ -71,7 +71,7 @@ def test_output_budget_scales_with_cards():
 
     assert output_budget(2) < output_budget(20)
     assert output_budget(20) >= 12000  # 20 cards of json + thinking must fit
-    assert output_budget(1000) == 16000  # capped
+    assert output_budget(10**6) == 128_000  # worst case = the model's own limit
 
 
 def test_retry_recovers_after_one_bad_response():

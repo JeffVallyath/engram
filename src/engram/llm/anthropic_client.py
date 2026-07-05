@@ -41,29 +41,16 @@ class AnthropicClient:
 
         budget = output_budget(req.max_cards)
 
-        # structured-output path first, plain text + retry as fallback
-        try:
-            resp = self.sdk.messages.parse(
-                model=self.model,
-                max_tokens=budget,
-                system=system,
-                messages=[{"role": "user", "content": content}],
-                output_format=CardDraftList,
-            )
-            if resp.parsed_output is not None:
-                return resp.parsed_output
-        except MissingAPIKeyError:
-            raise
-        except Exception:
-            pass
-
+        # streaming so a big budget can't hit http timeouts; schema is
+        # enforced by our own pydantic validation + one corrective retry
         def send(corrective):
             msgs = [{"role": "user", "content": content}]
             if corrective:
                 msgs.append({"role": "user", "content": corrective})
-            resp = self.sdk.messages.create(
+            with self.sdk.messages.stream(
                 model=self.model, max_tokens=budget, system=system, messages=msgs
-            )
+            ) as stream:
+                resp = stream.get_final_message()
             return next((b.text for b in resp.content if b.type == "text"), "")
 
         return draft_with_retry(send)
