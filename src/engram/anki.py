@@ -105,12 +105,13 @@ class AnkiClient:
                     problems.append(f'model "{model}" has no field "{f}" (has: {", ".join(sorted(have))})')
         return problems
 
-    def _note(self, card: CardDraft, cfg: Config, tags: list[str]) -> dict:
+    def _note(self, card: CardDraft, cfg: Config, tags: list[str], img_tag="") -> dict:
         a = cfg.anki
+        back = card.back + img_tag
         if card.note_format == "cloze":
-            model, fields = a.cloze_model, {a.cloze_text_field: card.front, a.cloze_extra_field: card.back}
+            model, fields = a.cloze_model, {a.cloze_text_field: card.front, a.cloze_extra_field: back}
         else:
-            model, fields = a.basic_model, {a.basic_front_field: card.front, a.basic_back_field: card.back}
+            model, fields = a.basic_model, {a.basic_front_field: card.front, a.basic_back_field: back}
         return {
             "deckName": a.deck,
             "modelName": model,
@@ -119,14 +120,22 @@ class AnkiClient:
             "options": {"allowDuplicate": False},
         }
 
-    def add_cards(self, cards, cfg: Config, app_class: str, window_title: str):
+    def add_cards(self, cards, cfg: Config, app_class: str, window_title: str, image_b64=None):
         """The single write path to Anki — only ever called from the review
         dialog's confirm handler (tests enforce this)."""
         if self._protocol is None:
             self.connect()
         self.ensure_deck(cfg.anki.deck)
 
-        notes = [self._note(c, cfg, build_tags(c, app_class, window_title, cfg)) for c in cards]
+        img_tag = ""
+        if image_b64:
+            # snap capture: store the screenshot in anki's media folder and
+            # show it on the back of every card from this capture
+            fname = f"engram_{int(datetime.datetime.now().timestamp() * 1000)}.png"
+            self._invoke("storeMediaFile", filename=fname, data=image_b64)
+            img_tag = f'<br><img src="{fname}">'
+
+        notes = [self._note(c, cfg, build_tags(c, app_class, window_title, cfg), img_tag) for c in cards]
         addable = self._invoke("canAddNotes", notes=notes)
 
         results = []

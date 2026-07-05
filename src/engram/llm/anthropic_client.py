@@ -31,13 +31,21 @@ class AnthropicClient:
         system = build_system_prompt(req.max_cards, self.cfg.cards.cloze_max_deletions)
         user = build_user_prompt(req)
 
+        content = []
+        if req.image_b64:
+            content.append({
+                "type": "image",
+                "source": {"type": "base64", "media_type": "image/png", "data": req.image_b64},
+            })
+        content.append({"type": "text", "text": user})
+
         # structured-output path first, plain text + retry as fallback
         try:
             resp = self.sdk.messages.parse(
                 model=self.model,
                 max_tokens=2048,
                 system=system,
-                messages=[{"role": "user", "content": user}],
+                messages=[{"role": "user", "content": content}],
                 output_format=CardDraftList,
             )
             if resp.parsed_output is not None:
@@ -48,7 +56,7 @@ class AnthropicClient:
             pass
 
         def send(corrective):
-            msgs = [{"role": "user", "content": user}]
+            msgs = [{"role": "user", "content": content}]
             if corrective:
                 msgs.append({"role": "user", "content": corrective})
             resp = self.sdk.messages.create(

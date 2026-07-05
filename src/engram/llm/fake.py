@@ -10,6 +10,16 @@ class FakeClient:
 
     def draft_cards(self, req: DraftRequest) -> CardDraftList:
         txt = req.selected_text.strip()
+        if req.image_b64:
+            card = CardDraft(
+                knowledge_type=req.knowledge_type,
+                note_format="basic",
+                front="What does the captured screenshot show?",
+                back="(fake offline draft — a real provider would interpret the image)",
+                tags=["fake"],
+                why_this_card="fake offline draft (image)",
+            )
+            return CardDraftList(cards=[card])
         if len(txt) < 15:
             return CardDraftList(
                 cards=[],

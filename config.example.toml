@@ -22,6 +22,9 @@ max_cards = 2
 [hotkey]
 # note: ctrl+shift+a is taken by chrome (tab search), pick something free
 combo = "ctrl+alt+a"
+# region screenshot -> the model interprets diagrams/figures (vision).
+# the screenshot is also attached to the back of the resulting cards.
+snap_combo = "ctrl+alt+s"
 
 [anki]
 url = "http://127.0.0.1:8765"

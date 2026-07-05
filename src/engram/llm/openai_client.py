@@ -34,10 +34,18 @@ class OpenAIClient:
         system = build_system_prompt(req.max_cards, self.cfg.cards.cloze_max_deletions)
         user = build_user_prompt(req)
 
+        content = []
+        if req.image_b64:
+            content.append({
+                "type": "image_url",
+                "image_url": {"url": f"data:image/png;base64,{req.image_b64}"},
+            })
+        content.append({"type": "text", "text": user})
+
         def send(corrective):
             msgs = [
                 {"role": "system", "content": system},
-                {"role": "user", "content": user},
+                {"role": "user", "content": content},
             ]
             if corrective:
                 msgs.append({"role": "user", "content": corrective})

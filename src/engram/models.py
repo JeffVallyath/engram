@@ -42,6 +42,7 @@ class DraftRequest:
     window_title: str
     app_class: str
     max_cards: int
+    image_b64: str = ""  # set for snap captures, empty for text captures
 
 
 @dataclass
@@ -71,6 +72,12 @@ class ValidationOutcome:
 @dataclass
 class CaptureEvent:
     capture: Optional[CaptureResult]  # None = nothing selected
+
+
+@dataclass
+class SnapEvent:
+    window_title: str
+    app_class: str
 
 
 @dataclass

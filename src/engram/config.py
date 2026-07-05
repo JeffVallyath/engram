@@ -22,6 +22,7 @@ max_cards = 2                # hard ceiling, the popup note can never raise it
 [hotkey]
 # ctrl+shift+a collides with chrome's tab search, so alt it is
 combo = "ctrl+alt+a"
+snap_combo = "ctrl+alt+s"    # region screenshot -> vision draft
 
 [anki]
 url = "http://127.0.0.1:8765"
@@ -60,6 +61,7 @@ class LLMConfig:
 @dataclass(frozen=True)
 class HotkeyConfig:
     combo: str = "ctrl+alt+a"
+    snap_combo: str = "ctrl+alt+s"
 
 
 @dataclass(frozen=True)
@@ -131,7 +133,10 @@ def load_config(path: Path = CONFIG_PATH) -> Config:
 
     return Config(
         llm=llm,
-        hotkey=HotkeyConfig(combo=str(raw.get("hotkey", {}).get("combo", "ctrl+alt+a"))),
+        hotkey=HotkeyConfig(
+            combo=str(raw.get("hotkey", {}).get("combo", "ctrl+alt+a")),
+            snap_combo=str(raw.get("hotkey", {}).get("snap_combo", "ctrl+alt+s")),
+        ),
         anki=AnkiConfig(
             url=str(anki_raw.get("url", "http://127.0.0.1:8765")),
             deck=str(anki_raw.get("deck", "engram")),

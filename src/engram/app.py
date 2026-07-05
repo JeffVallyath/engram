@@ -27,6 +27,7 @@ from .models import (
     DraftReady,
     DraftRequest,
     QuitEvent,
+    SnapEvent,
     ValidationOutcome,
 )
 from .router import template_drafts
@@ -85,6 +86,14 @@ class App:
             return
         self.q.put(CaptureEvent(capture_selection(self.cfg.capture)))
 
+    def on_snap_hotkey(self):
+        from .capture import active_app_class, active_window_title
+
+        if self.busy:
+            return
+        # grab window info here, before the overlay takes over the screen
+        self.q.put(SnapEvent(active_window_title(), active_app_class()))
+
     def draft_worker(self, req: DraftRequest):
         try:
             self.q.put(DraftReady(req, draft_outcome(self.client, req, self.cfg)))
@@ -107,6 +116,8 @@ class App:
                     return
                 if isinstance(ev, CaptureEvent):
                     self.handle_capture(ev.capture)
+                elif isinstance(ev, SnapEvent):
+                    self.handle_snap(ev)
                 elif isinstance(ev, DraftReady):
                     self.open_review(ev.request, ev.outcome)
                 elif isinstance(ev, DraftFailed):
@@ -139,6 +150,50 @@ class App:
 
         TypePicker(self.root, capture, on_submit, on_cancel, initial_note=initial_note)
 
+    def handle_snap(self, ev: SnapEvent):
+        from .snap import grab_region, to_b64_png
+
+        if self.busy:
+            return
+        self.busy = True
+        img = grab_region(self.root)
+        if img is None:
+            self.busy = False
+            return
+        self.busy = False
+        self.snap_picker(ev, to_b64_png(img))
+
+    def snap_picker(self, ev: SnapEvent, img_b64: str, initial_note=""):
+        from .ui.picker import TypePicker
+
+        self.busy = True
+        capture = CaptureResult(
+            text="[screenshot]", window_title=ev.window_title,
+            app_class=ev.app_class, prior_clipboard_was_text=True,
+        )
+
+        def on_submit(kt, note):
+            req = DraftRequest(
+                knowledge_type=kt,
+                selected_text="",
+                user_note=note,
+                window_title=ev.window_title,
+                app_class=ev.app_class,
+                max_cards=self.cfg.llm.max_cards,
+                image_b64=img_b64,
+            )
+            log.info("snap accepted: type=%s app=%s", kt, ev.app_class)
+            if self.client is None:
+                self.open_review(req, draft_outcome(None, req, self.cfg))
+            else:
+                self.toast("Drafting from screenshot…")
+                threading.Thread(target=self.draft_worker, args=(req,), daemon=True).start()
+
+        def on_cancel():
+            self.busy = False
+
+        TypePicker(self.root, capture, on_submit, on_cancel, initial_note=initial_note)
+
     def open_review(self, req: DraftRequest, outcome: ValidationOutcome):
         from .ui.approval import ApprovalDialog
 
@@ -147,6 +202,10 @@ class App:
         def on_done(action):
             self.busy = False
             if action == "revise":
+                if req.image_b64:
+                    self.snap_picker(SnapEvent(req.window_title, req.app_class),
+                                     req.image_b64, initial_note=req.user_note)
+                    return
                 capture = CaptureResult(
                     text=req.selected_text,
                     window_title=req.window_title,
@@ -191,8 +250,10 @@ class App:
             pystray.MenuItem("Open config folder", open_config),
             pystray.MenuItem("Quit engram", quit_app),
         )
-        self.tray = pystray.Icon("engram", img,
-                                 f"engram ({self.cfg.llm.provider}) — {self.cfg.hotkey.combo}", menu)
+        self.tray = pystray.Icon(
+            "engram", img,
+            f"engram ({self.cfg.llm.provider}) — {self.cfg.hotkey.combo} text, "
+            f"{self.cfg.hotkey.snap_combo} snap", menu)
         self.tray.run_detached()
 
     def shutdown(self):
@@ -214,9 +275,11 @@ class App:
             return 1
 
         hotkey.register(self.cfg.hotkey.combo, self.on_hotkey)
+        hotkey.register(self.cfg.hotkey.snap_combo, self.on_snap_hotkey)
         self.make_tray()
-        log.info("engram started: hotkey=%s provider=%s deck=%s",
-                 self.cfg.hotkey.combo, self.cfg.llm.provider, self.cfg.anki.deck)
+        log.info("engram started: hotkey=%s snap=%s provider=%s deck=%s",
+                 self.cfg.hotkey.combo, self.cfg.hotkey.snap_combo,
+                 self.cfg.llm.provider, self.cfg.anki.deck)
         self.root.after(100, self.poll)
         self.root.mainloop()
         return 0
@@ -302,7 +365,7 @@ def cli_ui_test(cfg: Config) -> int:
     from .ui.picker import TypePicker
 
     class DryRunAnki(AnkiClient):
-        def add_cards(self, cards, cfg_, app_class, window_title):
+        def add_cards(self, cards, cfg_, app_class, window_title, image_b64=None):
             return [(c, f"added (dry-run) {c.front[:40]!r}") for c in cards]
 
     root = tk.Tk()
@@ -342,6 +405,11 @@ def main(argv=None) -> int:
     from .logging_setup import setup_logging
 
     setup_logging()
+    try:
+        # per-monitor dpi awareness so snap coordinates map 1:1 to pixels
+        ctypes.windll.shcore.SetProcessDpiAwareness(2)
+    except Exception:
+        pass
     try:
         cfg = load_config()
     except ConfigError as e:
