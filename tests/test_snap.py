@@ -73,6 +73,56 @@ def test_add_cards_stores_image_and_embeds_it():
 
 
 @responses.activate
+def test_first_mode_attaches_image_to_first_card_only():
+    seen = {}
+
+    def handler(http_request):
+        payload = json.loads(http_request.body)
+        action = payload["action"]
+        if action == "version":
+            result = 6
+        elif action == "createDeck":
+            result = 1
+        elif action == "storeMediaFile":
+            result = payload["params"]["filename"]
+        elif action == "canAddNotes":
+            result = [True, True]
+        elif action == "addNotes":
+            seen["notes"] = payload["params"]["notes"]
+            result = [1, 2]
+        else:
+            raise AssertionError(action)
+        return 200, {}, json.dumps({"result": result, "error": None})
+
+    responses.add_callback(responses.POST, URL, callback=handler)
+    cards = [
+        CardDraft(knowledge_type="procedure", note_format="basic", front="First move vs Be7?", back="4.d4"),
+        CardDraft(knowledge_type="procedure", note_format="basic", front="Response to the gambit?", back="4.Nxd4"),
+    ]
+    AnkiClient(URL).add_cards(cards, Config(), "browser", "w",
+                              image_b64="aGVsbG8=", image_mode="first")
+    backs = [n["fields"]["Back"] for n in seen["notes"]]
+    assert "<img" in backs[0]
+    assert "<img" not in backs[1]
+
+
+def test_attach_mode_parsing(tmp_path):
+    from engram.config import ConfigError, load_config
+    import pytest
+
+    p = tmp_path / "config.toml"
+    p.write_text('[snap]\nattach_image = "all"\n', encoding="utf-8")
+    assert load_config(p).snap.attach_image == "all"
+
+    p.write_text("[snap]\nattach_image = false\n", encoding="utf-8")
+    assert load_config(p).snap.attach_image == "none"  # old bool style still works
+
+    p.write_text('[snap]\nattach_image = "sometimes"\n', encoding="utf-8")
+    with pytest.raises(ConfigError):
+        load_config(p)
+
+
+@responses.activate
 def test_add_cards_without_image_stores_nothing():
     actions = []
 

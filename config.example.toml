@@ -44,9 +44,14 @@ clipboard_timeout_ms = 500
 tag_window_title = false
 
 [snap]
-# put the screenshot on the back of snap cards (recall first, then see the
-# original figure as the answer). set false for text-only cards.
-attach_image = true
+# where the screenshot ends up on snap cards:
+#   "first" (default) - back of the first card only. one shared answer image
+#                       would leak the answers to sibling cards reviewed in
+#                       the same session; this keeps one look at the figure
+#                       without spoiling the rest.
+#   "all"             - back of every card
+#   "none"            - text-only cards
+attach_image = "first"
 
 [cards]
 front_max_chars = 200

@@ -120,7 +120,8 @@ class AnkiClient:
             "options": {"allowDuplicate": False},
         }
 
-    def add_cards(self, cards, cfg: Config, app_class: str, window_title: str, image_b64=None):
+    def add_cards(self, cards, cfg: Config, app_class: str, window_title: str,
+                  image_b64=None, image_mode="first"):
         """The single write path to Anki — only ever called from the review
         dialog's confirm handler (tests enforce this)."""
         if self._protocol is None:
@@ -128,14 +129,18 @@ class AnkiClient:
         self.ensure_deck(cfg.anki.deck)
 
         img_tag = ""
-        if image_b64:
-            # snap capture: store the screenshot in anki's media folder and
-            # show it on the back of every card from this capture
+        if image_b64 and image_mode != "none":
             fname = f"engram_{int(datetime.datetime.now().timestamp() * 1000)}.png"
             self._invoke("storeMediaFile", filename=fname, data=image_b64)
             img_tag = f'<br><img src="{fname}">'
 
-        notes = [self._note(c, cfg, build_tags(c, app_class, window_title, cfg), img_tag) for c in cards]
+        # "first": screenshot on card 0 only, so one card's answer image can't
+        # leak the answers to its siblings in the same review session
+        notes = [
+            self._note(c, cfg, build_tags(c, app_class, window_title, cfg),
+                       img_tag if (image_mode == "all" or i == 0) else "")
+            for i, c in enumerate(cards)
+        ]
         addable = self._invoke("canAddNotes", notes=notes)
 
         results = []

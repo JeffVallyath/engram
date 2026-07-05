@@ -136,12 +136,13 @@ class ApprovalDialog:
         if not cards:
             self.status.configure(text="No cards selected.", fg=WARN)
             return
-        img = self.request.image_b64 if self.cfg.snap.attach_image else ""
+        img = self.request.image_b64 if self.cfg.snap.attach_image != "none" else ""
         try:
             # the one and only place cards get sent to anki
             results = self.anki.add_cards(cards, self.cfg, self.request.app_class,
                                           self.request.window_title,
-                                          image_b64=img or None)
+                                          image_b64=img or None,
+                                          image_mode=self.cfg.snap.attach_image)
         except AnkiUnavailableError as e:
             self.status.configure(text=f"{e}\nStart Anki, then press Retry — your drafts are kept.", fg=ERR)
             self.send_btn.configure(text="Retry (Ctrl+Enter)")

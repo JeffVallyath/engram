@@ -371,7 +371,7 @@ def cli_ui_test(cfg: Config) -> int:
     from .ui.picker import TypePicker
 
     class DryRunAnki(AnkiClient):
-        def add_cards(self, cards, cfg_, app_class, window_title, image_b64=None):
+        def add_cards(self, cards, cfg_, app_class, window_title, image_b64=None, image_mode="first"):
             return [(c, f"added (dry-run) {c.front[:40]!r}") for c in cards]
 
     root = tk.Tk()

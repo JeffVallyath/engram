@@ -40,7 +40,10 @@ clipboard_timeout_ms = 500
 tag_window_title = false
 
 [snap]
-attach_image = true          # put the screenshot on the back of snap cards
+# "first" = screenshot on the back of the first card only (default — avoids one
+# card's answer image leaking the answers to its sibling cards),
+# "all" = on every card, "none" = never
+attach_image = "first"
 
 [cards]
 front_max_chars = 200
@@ -88,7 +91,7 @@ class CaptureConfig:
 
 @dataclass(frozen=True)
 class SnapConfig:
-    attach_image: bool = True
+    attach_image: str = "first"  # first | all | none
 
 
 @dataclass(frozen=True)
@@ -166,7 +169,14 @@ def load_config(path: Path = CONFIG_PATH) -> Config:
             back_max_chars=int(cards_raw.get("back_max_chars", 500)),
             cloze_max_deletions=int(cards_raw.get("cloze_max_deletions", 2)),
         ),
-        snap=SnapConfig(
-            attach_image=bool(raw.get("snap", {}).get("attach_image", True)),
-        ),
+        snap=SnapConfig(attach_image=_attach_mode(raw.get("snap", {}).get("attach_image", "first"), path)),
     )
+
+
+def _attach_mode(val, path):
+    if isinstance(val, bool):  # old-style true/false still accepted
+        return "all" if val else "none"
+    mode = str(val).lower()
+    if mode not in ("first", "all", "none"):
+        raise ConfigError(f'snap.attach_image in {path} must be "first", "all" or "none" (got {val!r})')
+    return mode
