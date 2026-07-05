@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 
+from .. import costs
 from ..config import Config
 from ..models import CardDraftList, DraftRequest
 from ..router import build_system_prompt, build_user_prompt
@@ -40,6 +41,7 @@ class AnthropicClient:
         content.append({"type": "text", "text": user})
 
         budget = output_budget(req.max_cards)
+        usages = []
 
         # streaming so a big budget can't hit http timeouts; schema is
         # enforced by our own pydantic validation + one corrective retry
@@ -51,6 +53,17 @@ class AnthropicClient:
                 model=self.model, max_tokens=budget, system=system, messages=msgs
             ) as stream:
                 resp = stream.get_final_message()
+            usages.append(resp.usage)
             return next((b.text for b in resp.content if b.type == "text"), "")
 
-        return draft_with_retry(send)
+        try:
+            return draft_with_retry(send)
+        finally:
+            if usages:
+                costs.record(
+                    self.model, len(usages),
+                    sum(getattr(u, "input_tokens", 0) for u in usages),
+                    sum(getattr(u, "output_tokens", 0) for u in usages),
+                    sum(getattr(u, "cache_read_input_tokens", 0) or 0 for u in usages),
+                    has_image=bool(req.image_b64), cards=req.max_cards,
+                )

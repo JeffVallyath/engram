@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 
+from .. import costs
 from ..config import Config
 from ..models import CardDraftList, DraftRequest
 from ..router import build_system_prompt, build_user_prompt
@@ -41,6 +42,7 @@ class OpenAIClient:
                 "image_url": {"url": f"data:image/png;base64,{req.image_b64}"},
             })
         content.append({"type": "text", "text": user})
+        usages = []
 
         def send(corrective):
             msgs = [
@@ -55,6 +57,16 @@ class OpenAIClient:
                 messages=msgs,
                 response_format={"type": "json_object"},
             )
+            usages.append(resp.usage)
             return resp.choices[0].message.content or ""
 
-        return draft_with_retry(send)
+        try:
+            return draft_with_retry(send)
+        finally:
+            if usages:
+                costs.record(
+                    self.model, len(usages),
+                    sum(getattr(u, "prompt_tokens", 0) for u in usages),
+                    sum(getattr(u, "completion_tokens", 0) for u in usages),
+                    has_image=bool(req.image_b64), cards=req.max_cards,
+                )
