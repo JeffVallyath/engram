@@ -7,13 +7,7 @@ from typing import Callable
 from ..anki import AnkiClient, AnkiError, AnkiUnavailableError, reconcile_deck
 from ..config import Config
 from ..models import CardDraft, DraftRequest, ValidationOutcome
-
-BG = "#1e1e24"
-FG = "#e8e8ee"
-DIM = "#9a9aa6"
-WARN = "#d9a05b"
-ERR = "#d97070"
-OK = "#7bc47f"
+from .theme import BG, DIM, ERR, FG, OK, WARN
 
 
 class ApprovalDialog:
@@ -56,9 +50,9 @@ class ApprovalDialog:
         tk.Button(row, text="Close (Esc)", command=self._close).pack(side="left", padx=4)
         top.bind("<Return>", lambda _e: self._revise())
 
-    def _revise(self, note=None):
+    def _revise(self):
         self.top.destroy()
-        self.on_done("revise", note)
+        self.on_done("revise", None)
 
     def _draft_more(self):
         # keep the cards already on screen, draft the omitted ones, and merge

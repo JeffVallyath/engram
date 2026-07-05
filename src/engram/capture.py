@@ -149,4 +149,4 @@ def capture_selection(cfg: CaptureConfig) -> CaptureResult | None:
 
     if not txt.strip():
         return None
-    return CaptureResult(text=txt, window_title=title, app_class=app, prior_clipboard_was_text=had_text)
+    return CaptureResult(text=txt, window_title=title, app_class=app)

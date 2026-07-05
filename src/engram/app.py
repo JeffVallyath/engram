@@ -58,6 +58,37 @@ def build_request(capture: CaptureResult, kt: str, note: str, cfg: Config, n=Non
     )
 
 
+def merge_carry(outcome: ValidationOutcome, kept, deck) -> ValidationOutcome:
+    # prepend the cards the user already approved, so the review holds the
+    # original set + the newly-drafted omitted ones (one push to anki), and
+    # keep the deck they already chose
+    return ValidationOutcome(
+        accepted=kept + outcome.accepted,
+        dropped=outcome.dropped,
+        warnings=outcome.warnings,
+        omitted=outcome.omitted,
+        suggested_deck=deck or outcome.suggested_deck,
+    )
+
+
+def print_outcome(outcome: ValidationOutcome):
+    if outcome.reject_reason:
+        print(f"NO CARD: {outcome.reject_reason}")
+        return
+    if outcome.suggested_deck:
+        print(f"suggested deck: {outcome.suggested_deck}")
+    for card in outcome.accepted:
+        print(f"[{card.knowledge_type}/{card.note_format}] {card.why_this_card}")
+        print(f"  FRONT: {card.front}")
+        print(f"  BACK:  {card.back}")
+    for d in outcome.dropped:
+        print(f"dropped: {d.reason}")
+    for w in outcome.warnings:
+        print(f"warning: {w}")
+    if outcome.omitted:
+        print(f"omitted targets (card-worthy, not drafted): {'; '.join(outcome.omitted)}")
+
+
 def draft_outcome(client, req: DraftRequest, cfg: Config) -> ValidationOutcome:
     if client is None:
         # manual mode: skeleton templates would fail the prompt validators by
@@ -107,16 +138,7 @@ class App:
         try:
             outcome = draft_outcome(self.client, req, self.cfg)
             if carry:
-                # prepend the cards the user already approved, so the review
-                # holds the original set + the newly-drafted omitted ones, and
-                # keep the deck they already chose
-                outcome = ValidationOutcome(
-                    accepted=carry + outcome.accepted,
-                    dropped=outcome.dropped,
-                    warnings=outcome.warnings,
-                    omitted=outcome.omitted,
-                    suggested_deck=deck or outcome.suggested_deck,
-                )
+                outcome = merge_carry(outcome, carry, deck)
             self.q.put(DraftReady(req, outcome))
         except LLMDraftError as e:
             self.q.put(DraftFailed(req, str(e), e.raw_text))
@@ -197,8 +219,7 @@ class App:
 
         self.busy = True
         capture = CaptureResult(
-            text="[screenshot]", window_title=ev.window_title,
-            app_class=ev.app_class, prior_clipboard_was_text=True,
+            text="[screenshot]", window_title=ev.window_title, app_class=ev.app_class,
         )
 
         def on_submit(kt, note, n):
@@ -260,10 +281,7 @@ class App:
         if self.busy:
             return
         self.busy = True
-        capture = CaptureResult(
-            text=text, window_title=filename, app_class="file",
-            prior_clipboard_was_text=True,
-        )
+        capture = CaptureResult(text=text, window_title=filename, app_class="file")
 
         def on_submit(kt, note, n):
             req = DraftRequest(
@@ -317,7 +335,6 @@ class App:
                     text=req.selected_text,
                     window_title=req.window_title,
                     app_class=req.app_class,
-                    prior_clipboard_was_text=True,
                 )
                 self.handle_capture(capture, initial_note=note, initial_cards=req.max_cards)
 
@@ -329,10 +346,12 @@ class App:
         messagebox.showerror("engram — drafting failed", ev.message + detail)
 
     def toast(self, text, ms=1400):
+        from .ui.theme import BG, FG
+
         top = tk.Toplevel(self.root)
         top.overrideredirect(True)
         top.attributes("-topmost", True)
-        tk.Label(top, text=text, bg="#1e1e24", fg="#e8e8ee", padx=14, pady=8,
+        tk.Label(top, text=text, bg=BG, fg=FG, padx=14, pady=8,
                  font=("Segoe UI", 10)).pack()
         top.geometry(f"+{self.root.winfo_pointerx() + 10}+{self.root.winfo_pointery() + 10}")
         top.after(ms, top.destroy)
@@ -422,21 +441,7 @@ def cli_draft(cfg: Config, args) -> int:
             print(f"raw model output:\n{raw}", file=sys.stderr)
         return 1
 
-    if outcome.reject_reason:
-        print(f"NO CARD: {outcome.reject_reason}")
-        return 0
-    if outcome.suggested_deck:
-        print(f"suggested deck: {outcome.suggested_deck}")
-    for card in outcome.accepted:
-        print(f"[{card.knowledge_type}/{card.note_format}] {card.why_this_card}")
-        print(f"  FRONT: {card.front}")
-        print(f"  BACK:  {card.back}")
-    for d in outcome.dropped:
-        print(f"dropped: {d.reason}")
-    for w in outcome.warnings:
-        print(f"warning: {w}")
-    if outcome.omitted:
-        print(f"omitted targets (card-worthy, not drafted): {'; '.join(outcome.omitted)}")
+    print_outcome(outcome)
     return 0
 
 
@@ -503,18 +508,7 @@ def cli_ingest(cfg: Config, args) -> int:
         return 1
 
     if args.print:
-        if outcome.reject_reason:
-            print(f"NO CARD: {outcome.reject_reason}")
-        if outcome.suggested_deck:
-            print(f"suggested deck: {outcome.suggested_deck}")
-        for card in outcome.accepted:
-            print(f"[{card.knowledge_type}/{card.note_format}] {card.why_this_card}")
-            print(f"  FRONT: {card.front}")
-            print(f"  BACK:  {card.back}")
-        for d in outcome.dropped:
-            print(f"dropped: {d.reason}")
-        if outcome.omitted:
-            print(f"omitted targets: {'; '.join(outcome.omitted)}")
+        print_outcome(outcome)
         return 0
 
     # normal path: the same review gate as every other capture
@@ -532,10 +526,7 @@ def cli_ingest(cfg: Config, args) -> int:
                 if oc2 is not None:
                     if carry:  # draft_more: keep the approved cards + deck, add the new
                         kept, deck = carry
-                        oc2 = ValidationOutcome(accepted=kept + oc2.accepted,
-                                                dropped=oc2.dropped, warnings=oc2.warnings,
-                                                omitted=oc2.omitted,
-                                                suggested_deck=deck or oc2.suggested_deck)
+                        oc2 = merge_carry(oc2, kept, deck)
                     open_dialog(r2, oc2)
                     return
             root.quit()
@@ -587,7 +578,7 @@ def cli_ui_test(cfg: Config) -> int:
     capture = CaptureResult(
         text="Interleaving improves discrimination between related categories, "
              "while spacing gives rest between encounters of the same item.",
-        window_title="ui-test", app_class="test", prior_clipboard_was_text=True,
+        window_title="ui-test", app_class="test",
     )
 
     def on_submit(kt, note, n):

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import dataclasses
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -17,7 +18,7 @@ DEFAULT_TOML = """\
 provider = "manual"          # anthropic | openai | manual | fake
 model = "claude-haiku-4-5"
 api_key_env = "ANTHROPIC_API_KEY"
-max_cards = 2                # hard ceiling, the popup note can never raise it
+max_cards = 2                # default per-capture budget — the popup's +/- can adjust it, captured text never can
 
 [hotkey]
 # ctrl+shift+a collides with chrome's tab search, so alt it is
@@ -118,6 +119,25 @@ def ensure_config_file(path: Path = CONFIG_PATH) -> Path:
     return path
 
 
+def _coerce(name, val, default):
+    if name == "tags":
+        return tuple(str(t) for t in val)
+    if isinstance(default, bool):  # before int — bool is an int subclass
+        return bool(val)
+    if isinstance(default, int):
+        return int(val)
+    return str(val)
+
+
+def _section(raw, key, cls):
+    # only pass the keys present in the toml — the dataclass defaults are the
+    # single source of truth for everything else
+    data = raw.get(key, {})
+    kwargs = {f.name: _coerce(f.name, data[f.name], f.default)
+              for f in dataclasses.fields(cls) if f.name in data}
+    return cls(**kwargs)
+
+
 def load_config(path: Path = CONFIG_PATH) -> Config:
     ensure_config_file(path)
     try:
@@ -125,17 +145,8 @@ def load_config(path: Path = CONFIG_PATH) -> Config:
     except tomllib.TOMLDecodeError as e:
         raise ConfigError(f"couldn't parse {path}: {e}") from e
 
-    llm_raw = raw.get("llm", {})
-    anki_raw = raw.get("anki", {})
-    cap_raw = raw.get("capture", {})
-    cards_raw = raw.get("cards", {})
-
-    llm = LLMConfig(
-        provider=str(llm_raw.get("provider", "manual")).lower(),
-        model=str(llm_raw.get("model", "claude-haiku-4-5")),
-        api_key_env=str(llm_raw.get("api_key_env", "ANTHROPIC_API_KEY")),
-        max_cards=int(llm_raw.get("max_cards", 2)),
-    )
+    llm = _section(raw, "llm", LLMConfig)
+    llm = dataclasses.replace(llm, provider=llm.provider.lower())
     if llm.provider not in PROVIDERS:
         raise ConfigError(
             f"unknown llm.provider {llm.provider!r} in {path} — expected one of {', '.join(PROVIDERS)}"
@@ -145,30 +156,10 @@ def load_config(path: Path = CONFIG_PATH) -> Config:
 
     return Config(
         llm=llm,
-        hotkey=HotkeyConfig(
-            combo=str(raw.get("hotkey", {}).get("combo", "ctrl+alt+a")),
-            snap_combo=str(raw.get("hotkey", {}).get("snap_combo", "ctrl+alt+s")),
-        ),
-        anki=AnkiConfig(
-            url=str(anki_raw.get("url", "http://127.0.0.1:8765")),
-            deck=str(anki_raw.get("deck", "engram")),
-            tags=tuple(str(t) for t in anki_raw.get("tags", [])),
-            basic_model=str(anki_raw.get("basic_model", "Basic")),
-            basic_front_field=str(anki_raw.get("basic_front_field", "Front")),
-            basic_back_field=str(anki_raw.get("basic_back_field", "Back")),
-            cloze_model=str(anki_raw.get("cloze_model", "Cloze")),
-            cloze_text_field=str(anki_raw.get("cloze_text_field", "Text")),
-            cloze_extra_field=str(anki_raw.get("cloze_extra_field", "Back Extra")),
-        ),
-        capture=CaptureConfig(
-            clipboard_timeout_ms=int(cap_raw.get("clipboard_timeout_ms", 500)),
-            tag_window_title=bool(cap_raw.get("tag_window_title", False)),
-        ),
-        cards=CardsConfig(
-            front_max_chars=int(cards_raw.get("front_max_chars", 200)),
-            back_max_chars=int(cards_raw.get("back_max_chars", 500)),
-            cloze_max_deletions=int(cards_raw.get("cloze_max_deletions", 2)),
-        ),
+        hotkey=_section(raw, "hotkey", HotkeyConfig),
+        anki=_section(raw, "anki", AnkiConfig),
+        capture=_section(raw, "capture", CaptureConfig),
+        cards=_section(raw, "cards", CardsConfig),
         snap=SnapConfig(attach_image=_attach_mode(raw.get("snap", {}).get("attach_image", "first"), path)),
     )
 

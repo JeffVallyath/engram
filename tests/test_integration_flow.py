@@ -25,7 +25,6 @@ def test_full_flow_capture_to_anki():
         ),
         window_title="Learning notes - Chrome",
         app_class="browser",
-        prior_clipboard_was_text=True,
     )
 
     # 2. the picker's answer becomes a DraftRequest
@@ -79,7 +78,9 @@ def test_full_flow_capture_to_anki():
 
 def test_draft_more_merges_kept_and_new_cards():
     # the "draft omitted (keep these)" path: approved cards carry forward and
-    # the newly-drafted omitted cards are appended into one review set
+    # the newly-drafted omitted cards are appended into one review set,
+    # with the user's chosen deck winning over the new suggestion
+    from engram.app import merge_carry
     from engram.models import CardDraft, ValidationOutcome
 
     kept = [
@@ -89,14 +90,14 @@ def test_draft_more_merges_kept_and_new_cards():
     new_draft = ValidationOutcome(accepted=[
         CardDraft(knowledge_type="concept", note_format="basic", front="Why X?", back="because"),
         CardDraft(knowledge_type="concept", note_format="basic", front="When Y?", back="then"),
-    ])
-    merged = ValidationOutcome(
-        accepted=kept + new_draft.accepted,
-        dropped=new_draft.dropped, warnings=new_draft.warnings, omitted=new_draft.omitted,
-    )
+    ], suggested_deck="Model::Suggestion")
+    merged = merge_carry(new_draft, kept, "Chess::Openings")
     assert len(merged.accepted) == 22
     assert merged.accepted[0].front == "Q0?"
     assert merged.accepted[-1].front == "When Y?"
+    assert merged.suggested_deck == "Chess::Openings"
+    # no deck chosen yet -> the new suggestion stands
+    assert merge_carry(new_draft, kept, None).suggested_deck == "Model::Suggestion"
 
 
 def test_prompt_injection_in_capture_cannot_raise_card_count():

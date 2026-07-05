@@ -15,8 +15,8 @@ provider = "manual"
 model = "claude-haiku-4-5"
 # Name of the environment variable that holds your API key (never the key itself).
 api_key_env = "ANTHROPIC_API_KEY"
-# Hard ceiling on cards per capture. The popup note can steer content but can
-# NEVER raise this — only editing this file can.
+# Default per-capture card budget. The popup's +/- control can adjust it per
+# capture; the captured text itself can NEVER raise it (trust hierarchy).
 max_cards = 2
 
 [hotkey]

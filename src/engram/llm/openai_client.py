@@ -6,7 +6,7 @@ from .. import costs
 from ..config import Config
 from ..models import CardDraftList, DraftRequest
 from ..router import build_system_prompt, build_user_prompt
-from .base import LLMDraftError, MissingAPIKeyError, draft_with_retry, output_budget
+from .base import LLMDraftError, MissingAPIKeyError, draft_with_retry
 
 DEFAULT_MODEL = "gpt-4o-mini"
 

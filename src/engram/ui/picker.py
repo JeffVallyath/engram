@@ -4,6 +4,7 @@ import tkinter as tk
 from typing import Callable
 
 from ..models import CaptureResult
+from .theme import ACCENT, BG, DIM, FG
 
 HEADER = "What do you want to be able to recall or do later?"
 NOTE_HINT = (
@@ -19,12 +20,6 @@ TYPE_KEYS = {
     "6": ("custom", "6 Custom"),
 }
 PICKABLE = {kt for kt, _ in TYPE_KEYS.values()}
-
-BG = "#1e1e24"
-FG = "#e8e8ee"
-DIM = "#9a9aa6"
-ACCENT = "#4f8cc9"
-
 
 CARDS_LIMIT = 5
 

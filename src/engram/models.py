@@ -8,8 +8,6 @@ from pydantic import BaseModel, Field, model_validator
 KnowledgeType = Literal["fact", "concept", "procedure", "formula", "cloze", "custom"]
 NoteFormat = Literal["basic", "cloze"]
 
-KNOWLEDGE_TYPES = ("fact", "concept", "procedure", "formula", "cloze", "custom")
-
 
 class CardDraft(BaseModel):
     knowledge_type: KnowledgeType
@@ -56,7 +54,6 @@ class CaptureResult:
     text: str
     window_title: str
     app_class: str
-    prior_clipboard_was_text: bool
 
 
 @dataclass
