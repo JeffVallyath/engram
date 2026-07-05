@@ -1,0 +1,45 @@
+# engram configuration
+#
+# The real config lives OUTSIDE the repo at:  %USERPROFILE%\.engram\config.toml
+# It is created automatically on first run. This file is a documented example —
+# never put API keys in the repo copy.
+
+[llm]
+# "anthropic" | "openai" | "manual" | "fake"
+#   manual — no LLM at all: the hotkey still captures, the picker still asks what
+#            you want to recall, and the approval dialog opens a type-specific
+#            template you fill in yourself. engram is useful with the LLM disabled.
+#   fake   — deterministic offline drafts, for trying the flow without a key.
+provider = "manual"
+# Used when provider = "anthropic". For "openai" a sensible default is picked too.
+model = "claude-haiku-4-5"
+# Name of the environment variable that holds your API key (never the key itself).
+api_key_env = "ANTHROPIC_API_KEY"
+# Hard ceiling on cards per capture. The popup note can steer content but can
+# NEVER raise this — only editing this file can.
+max_cards = 2
+
+[hotkey]
+combo = "ctrl+shift+a"
+
+[anki]
+url = "http://127.0.0.1:8765"
+deck = "engram"
+tags = []
+basic_model = "Basic"
+basic_front_field = "Front"
+basic_back_field = "Back"
+cloze_model = "Cloze"
+cloze_text_field = "Text"
+cloze_extra_field = "Back Extra"
+
+[capture]
+clipboard_timeout_ms = 500
+# Window titles can leak document names / private chat titles into Anki tags.
+# Off by default; when on, the title is truncated and sanitized hard.
+tag_window_title = false
+
+[cards]
+front_max_chars = 200
+back_max_chars = 500
+cloze_max_deletions = 2

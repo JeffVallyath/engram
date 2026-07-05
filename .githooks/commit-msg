@@ -1,0 +1,8 @@
+#!/bin/sh
+# Reject commit messages containing AI-attribution strings.
+# Enabled via: git config core.hooksPath .githooks
+if grep -qiE 'co-authored-by|generated with|claude' "$1"; then
+    echo "commit-msg hook: attribution strings (Co-Authored-By / Generated with / Claude) are not allowed in commit messages." >&2
+    exit 1
+fi
+exit 0

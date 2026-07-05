@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "engram"
+version = "0.1.0"
+description = "Global-hotkey Anki capture tool with a knowledge-type router: select text anywhere, say what you want to remember, approve 0-2 atomic cards."
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Jeff Vallyath" }]
+requires-python = ">=3.11"
+dependencies = [
+    "keyboard>=0.13",
+    "pyperclip>=1.8",
+    "pystray>=0.19",
+    "Pillow>=10",
+    "requests>=2.31",
+    "pydantic>=2.5",
+]
+
+[project.optional-dependencies]
+# Provider SDKs are optional: manual/template mode and the fake client work without any of them.
+anthropic = ["anthropic>=0.40"]
+openai = ["openai>=1.40"]
+dev = ["pytest>=8", "responses>=0.25"]
+
+[project.scripts]
+engram = "engram.app:main"
+
+[project.urls]
+Repository = "https://github.com/JeffVallyath/engram"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
