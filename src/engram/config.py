@@ -20,7 +20,8 @@ api_key_env = "ANTHROPIC_API_KEY"
 max_cards = 2                # hard ceiling, the popup note can never raise it
 
 [hotkey]
-combo = "ctrl+shift+a"
+# ctrl+shift+a collides with chrome's tab search, so alt it is
+combo = "ctrl+alt+a"
 
 [anki]
 url = "http://127.0.0.1:8765"
@@ -58,7 +59,7 @@ class LLMConfig:
 
 @dataclass(frozen=True)
 class HotkeyConfig:
-    combo: str = "ctrl+shift+a"
+    combo: str = "ctrl+alt+a"
 
 
 @dataclass(frozen=True)
@@ -130,7 +131,7 @@ def load_config(path: Path = CONFIG_PATH) -> Config:
 
     return Config(
         llm=llm,
-        hotkey=HotkeyConfig(combo=str(raw.get("hotkey", {}).get("combo", "ctrl+shift+a"))),
+        hotkey=HotkeyConfig(combo=str(raw.get("hotkey", {}).get("combo", "ctrl+alt+a"))),
         anki=AnkiConfig(
             url=str(anki_raw.get("url", "http://127.0.0.1:8765")),
             deck=str(anki_raw.get("deck", "engram")),

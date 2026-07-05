@@ -20,7 +20,8 @@ api_key_env = "ANTHROPIC_API_KEY"
 max_cards = 2
 
 [hotkey]
-combo = "ctrl+shift+a"
+# note: ctrl+shift+a is taken by chrome (tab search), pick something free
+combo = "ctrl+alt+a"
 
 [anki]
 url = "http://127.0.0.1:8765"
