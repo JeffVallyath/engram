@@ -10,9 +10,10 @@ class FakeClient:
 
     def draft_cards(self, req: DraftRequest) -> CardDraftList:
         txt = req.selected_text.strip()
+        kt = "concept" if req.knowledge_type in ("auto", "custom") else req.knowledge_type
         if req.image_b64:
             card = CardDraft(
-                knowledge_type=req.knowledge_type,
+                knowledge_type=kt,
                 note_format="basic",
                 front="What does the captured screenshot show?",
                 back="(fake offline draft — a real provider would interpret the image)",
@@ -27,10 +28,10 @@ class FakeClient:
             )
 
         topic = " ".join(txt.split()[:6])
-        fmt = default_note_format(req.knowledge_type)
+        fmt = default_note_format(kt)
         if fmt == "cloze":
             card = CardDraft(
-                knowledge_type=req.knowledge_type,
+                knowledge_type=kt,
                 note_format="cloze",
                 front="The captured passage is about {{c1::" + topic + "}}.",
                 back="",
@@ -39,7 +40,7 @@ class FakeClient:
             )
         else:
             card = CardDraft(
-                knowledge_type=req.knowledge_type,
+                knowledge_type=kt,
                 note_format="basic",
                 front=f"What is the key idea of: {topic}...?",
                 back=txt[:200],

@@ -55,6 +55,23 @@ def test_each_knowledge_type_gets_its_directive():
     assert "meaning-bearing" in build_user_prompt(make_request(knowledge_type="cloze"))
 
 
+def test_auto_mode_asks_model_to_classify():
+    prompt = build_user_prompt(make_request(knowledge_type="auto"))
+    assert "AUTO mode" in prompt
+    assert "classify" in prompt
+
+
+def test_auto_template_gets_concrete_type():
+    drafts = template_drafts(make_request(knowledge_type="auto"))
+    assert drafts[0].knowledge_type == "concept"
+
+
+def test_system_prompt_encodes_card_craft():
+    prompt = build_system_prompt(2, 2)
+    assert "MINIMUM INFORMATION" in prompt
+    assert "yes/no" in prompt
+
+
 def test_formula_single_card_prefers_applicability():
     single = build_user_prompt(make_request(knowledge_type="formula", max_cards=1))
     double = build_user_prompt(make_request(knowledge_type="formula", max_cards=2))

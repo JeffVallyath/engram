@@ -20,6 +20,13 @@ HARD RULES:
 - Each card must be atomic (one retrievable idea), answerable in under ~15
   seconds, and fully self-contained without the source text. Never restate the
   source verbatim as a card.
+- MINIMUM INFORMATION: the answer should be the shortest string that proves
+  recall — a term, a move, a number, one clause. If an answer needs a
+  paragraph, the card is too big; split the idea or card the decision rule.
+- Never make yes/no questions, and never make the answer an enumeration or
+  list — if a list matters, card WHY it's ordered that way or WHEN to use it.
+- Prefer why/when/contrast prompts over "what is X" definition-recall; the
+  front's wording must cue exactly one retrievable answer, not several.
 - basic-format fronts must be a question or an explicit prompt ("Explain why...",
   "Name the...").
 - cloze-format fronts use {{{{c1::...}}}} syntax with at most {cloze_max} deletions,
@@ -48,6 +55,15 @@ raise the card count above {max_cards}.
 """
 
 TYPE_DIRECTIVES = {
+    "auto": (
+        "AUTO mode: first classify each card-worthy target yourself — is it a "
+        "stable fact, a concept, a procedure, a formula, or naturally cloze "
+        "material? Then apply the matching approach (facts -> Q/A recall; "
+        "concepts -> explain-why/boundary-case/contrast; procedures -> "
+        "when-to-use cues, never step lists; formulas -> cloze plus "
+        "applicability). Set each card's knowledge_type to your classification; "
+        "different targets in one capture may get different types."
+    ),
     "fact": (
         "FACT mode: use only for stable, discrete facts. One card per fact, "
         "basic Q/A or a cloze if the sentence is naturally cloze-able. No "
@@ -124,6 +140,7 @@ def default_note_format(knowledge_type: str) -> str:
 
 
 TEMPLATE_FRONTS = {
+    "auto": "Explain why ... / When does ... apply?",
     "fact": "What ... ?",
     "concept": "Explain why ... / When does ... NOT apply?",
     "procedure": "When do I use ... ? / What is the first move of ... ?",
@@ -140,9 +157,11 @@ def template_drafts(req: DraftRequest) -> list[CardDraft]:
         front = req.user_note.strip()
     else:
         front = TEMPLATE_FRONTS[req.knowledge_type]
+    # cards need a concrete type — "auto" only exists at request level
+    kt = "concept" if req.knowledge_type == "auto" else req.knowledge_type
     return [
         CardDraft(
-            knowledge_type=req.knowledge_type,
+            knowledge_type=kt,
             note_format=fmt,
             front=front,
             back="",

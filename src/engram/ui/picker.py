@@ -3,13 +3,14 @@ from __future__ import annotations
 import tkinter as tk
 from typing import Callable
 
-from ..models import CaptureResult, KNOWLEDGE_TYPES
+from ..models import CaptureResult
 
 HEADER = "What do you want to be able to recall or do later?"
 NOTE_HINT = (
     "e.g. distinguish X from Y · remember when to use this · recall the assumption · test the boundary case"
 )
 TYPE_KEYS = {
+    "7": ("auto", "7 Auto"),
     "1": ("fact", "1 Fact"),
     "2": ("concept", "2 Concept"),
     "3": ("procedure", "3 Procedure"),
@@ -17,6 +18,7 @@ TYPE_KEYS = {
     "5": ("cloze", "5 Cloze"),
     "6": ("custom", "6 Custom"),
 }
+PICKABLE = {kt for kt, _ in TYPE_KEYS.values()}
 
 BG = "#1e1e24"
 FG = "#e8e8ee"
@@ -32,7 +34,7 @@ class TypePicker:
                  initial_note="", initial_cards=2):
         self.on_submit = on_submit
         self.on_cancel = on_cancel
-        self.picked = "concept"
+        self.picked = "auto"
         self.labels = {}
         self.hint_showing = False
         self.cards_n = max(1, min(initial_cards, CARDS_LIMIT))
@@ -79,7 +81,7 @@ class TypePicker:
         plus.pack(side="left")
         plus.bind("<Button-1>", lambda _e: self._bump_cards(1))
 
-        tk.Label(top, text="1-6 pick type · ↑↓ max cards · 0 skip (no card) · Enter draft · Esc cancel",
+        tk.Label(top, text="1-7 pick type · ↑↓ max cards · 0 skip (no card) · Enter draft · Esc cancel",
                  bg=BG, fg=DIM, font=("Segoe UI", 8)).pack(anchor="w", pady=(6, 0))
 
         for key, (kt, _label) in TYPE_KEYS.items():
@@ -125,7 +127,7 @@ class TypePicker:
         return "break"
 
     def _pick(self, kt):
-        assert kt in KNOWLEDGE_TYPES
+        assert kt in PICKABLE
         self.picked = kt
         for t, lbl in self.labels.items():
             lbl.configure(fg=FG if t == kt else DIM, bg=ACCENT if t == kt else BG)
