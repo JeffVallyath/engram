@@ -27,6 +27,12 @@ def test_system_prompt_contains_limits_and_zero_card_rule():
     assert "reject_reason" in prompt
 
 
+def test_system_prompt_demands_omission_transparency():
+    prompt = build_system_prompt(2, 2)
+    assert "NO SILENT OMISSION" in prompt
+    assert "omitted_targets" in prompt
+
+
 def test_system_prompt_states_trust_hierarchy():
     prompt = build_system_prompt(2, 2)
     assert "TRUST HIERARCHY" in prompt

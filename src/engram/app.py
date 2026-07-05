@@ -199,12 +199,13 @@ class App:
 
         self.busy = True
 
-        def on_done(action):
+        def on_done(action, note=None):
             self.busy = False
             if action == "revise":
+                note = note if note is not None else req.user_note
                 if req.image_b64:
                     self.snap_picker(SnapEvent(req.window_title, req.app_class),
-                                     req.image_b64, initial_note=req.user_note)
+                                     req.image_b64, initial_note=note)
                     return
                 capture = CaptureResult(
                     text=req.selected_text,
@@ -212,7 +213,7 @@ class App:
                     app_class=req.app_class,
                     prior_clipboard_was_text=True,
                 )
-                self.handle_capture(capture, initial_note=req.user_note)
+                self.handle_capture(capture, initial_note=note)
 
         ApprovalDialog(self.root, req, outcome, self.anki, self.cfg, on_done)
 
@@ -316,6 +317,8 @@ def cli_draft(cfg: Config, args) -> int:
         print(f"dropped: {d.reason}")
     for w in outcome.warnings:
         print(f"warning: {w}")
+    if outcome.omitted:
+        print(f"omitted targets (card-worthy, not drafted): {'; '.join(outcome.omitted)}")
     return 0
 
 
@@ -381,7 +384,7 @@ def cli_ui_test(cfg: Config) -> int:
 
         req = build_request(capture, kt, note, cfg)
         outcome = validate_drafts(FakeClient().draft_cards(req), cfg.cards, req.max_cards)
-        ApprovalDialog(root, req, outcome, DryRunAnki(), cfg, lambda _a: root.quit())
+        ApprovalDialog(root, req, outcome, DryRunAnki(), cfg, lambda *_: root.quit())
 
     TypePicker(root, capture, on_submit, root.quit)
     root.mainloop()

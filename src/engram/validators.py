@@ -81,4 +81,5 @@ def validate_drafts(draft: CardDraftList, cards_cfg: CardsConfig, max_cards: int
         warns.extend(_nitpicks(card, cards_cfg))
         kept.append(card)
 
-    return ValidationOutcome(accepted=kept, dropped=dropped, warnings=warns)
+    return ValidationOutcome(accepted=kept, dropped=dropped, warnings=warns,
+                             omitted=list(draft.omitted_targets))

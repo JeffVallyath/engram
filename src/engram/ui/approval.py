@@ -25,7 +25,7 @@ class ApprovalDialog:
         self.outcome = outcome
         self.anki = anki_client
         self.cfg = cfg
-        self.on_done = on_done  # called with "closed" or "revise"
+        self.on_done = on_done  # called with ("closed"|"revise", note_or_None)
         self.rows = []
         self.sent = False
 
@@ -55,9 +55,9 @@ class ApprovalDialog:
         tk.Button(row, text="Close (Esc)", command=self._close).pack(side="left", padx=4)
         top.bind("<Return>", lambda _e: self._revise())
 
-    def _revise(self):
+    def _revise(self, note=None):
         self.top.destroy()
-        self.on_done("revise")
+        self.on_done("revise", note)
 
     def _build_cards(self, top):
         for w in self.outcome.warnings:
@@ -66,6 +66,13 @@ class ApprovalDialog:
         for d in self.outcome.dropped:
             tk.Label(top, text=f"✗ draft dropped: {d.reason}", bg=BG, fg=DIM,
                      font=("Segoe UI", 9), wraplength=560, justify="left").pack(anchor="w")
+        if self.outcome.omitted:
+            n = len(self.outcome.omitted)
+            tk.Label(top,
+                     text=f"⚠ {n} more card-worthy target{'s' if n > 1 else ''} detected, "
+                          f"not drafted: {'; '.join(self.outcome.omitted)}",
+                     bg=BG, fg=WARN, font=("Segoe UI", 9), wraplength=560,
+                     justify="left").pack(anchor="w")
 
         for card in self.outcome.accepted:
             frm = tk.Frame(top, bg=BG, pady=6)
@@ -97,6 +104,10 @@ class ApprovalDialog:
 
         row = tk.Frame(top, bg=BG)
         row.pack(anchor="e")
+        if self.outcome.omitted:
+            note = "Draft cards for these omitted targets: " + "; ".join(self.outcome.omitted)
+            tk.Button(row, text="Draft omitted targets",
+                      command=lambda: self._revise(note)).pack(side="left", padx=4)
         self.send_btn = tk.Button(row, text=f"Add to Anki [{self.cfg.anki.deck}]  (Ctrl+Enter)",
                                   command=self._confirm)
         self.send_btn.pack(side="left", padx=4)
@@ -147,4 +158,4 @@ class ApprovalDialog:
     def _close(self):
         if self.top.winfo_exists():
             self.top.destroy()
-        self.on_done("closed")
+        self.on_done("closed", None)

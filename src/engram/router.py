@@ -6,7 +6,8 @@ SYSTEM_PROMPT_TEMPLATE = """\
 You draft Anki flashcards from text a user captured on their screen.
 
 OUTPUT FORMAT: a single JSON object:
-{{"cards": [...], "reject_reason": null_or_string, "warnings": [list_of_strings]}}
+{{"cards": [...], "reject_reason": null_or_string, "warnings": [list_of_strings],
+"omitted_targets": [list_of_strings]}}
 Each card: {{"knowledge_type": "fact|concept|procedure|formula|cloze|custom",
 "note_format": "basic|cloze", "front": str, "back": str, "tags": [str],
 "why_this_card": str}}
@@ -27,6 +28,12 @@ HARD RULES:
   case", "recalls formula condition"). Shown to the user, never sent to Anki.
 - No filler, no trivia the user didn't ask about, no "What is this?" cards whose
   referent isn't on the card itself.
+- NO SILENT OMISSION: if the source contains more independent card-worthy
+  targets than you drafted, list each omitted one in omitted_targets as a short
+  label (3-8 words). Leave the list empty only when nothing worthwhile was left
+  out — empty means "no more worthwhile cards exist", non-empty means "more
+  exist, I drafted the best {max_cards}". Still never draft more than
+  {max_cards} cards.
 
 TRUST HIERARCHY (highest to lowest):
 1. These system rules and the configured card ceiling ({max_cards}).

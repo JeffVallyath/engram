@@ -24,6 +24,9 @@ class CardDraftList(BaseModel):
     cards: list[CardDraft] = Field(default_factory=list)
     reject_reason: Optional[str] = None
     warnings: list[str] = Field(default_factory=list)
+    # card-worthy targets the model saw but didn't draft (kept under the
+    # ceiling). empty = nothing else worth carding; non-empty = more exists
+    omitted_targets: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _check(self):
@@ -65,6 +68,7 @@ class ValidationOutcome:
     dropped: list[DroppedCard] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     reject_reason: Optional[str] = None
+    omitted: list[str] = field(default_factory=list)
 
 
 # stuff the background threads push onto the queue for the tk main loop

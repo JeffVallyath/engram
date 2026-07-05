@@ -83,3 +83,16 @@ def test_long_back_warns_but_keeps():
     outcome = run(card(back="x" * 600))
     assert len(outcome.accepted) == 1
     assert any("back exceeds" in w for w in outcome.warnings)
+
+
+def test_omitted_targets_pass_through():
+    outcome = validate_drafts(
+        CardDraftList(cards=[card()], omitted_targets=["two knights transposition", "middlegame plan"]),
+        CFG, 2,
+    )
+    assert outcome.omitted == ["two knights transposition", "middlegame plan"]
+
+
+def test_no_omitted_targets_means_empty_list():
+    outcome = run(card())
+    assert outcome.omitted == []
