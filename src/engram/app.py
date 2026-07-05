@@ -243,7 +243,7 @@ def cli_draft(cfg: Config, args) -> int:
         return 1
 
     if outcome.reject_reason:
-        print(f"NO CARD — {outcome.reject_reason}")
+        print(f"NO CARD: {outcome.reject_reason}")
         return 0
     for card in outcome.accepted:
         print(f"[{card.knowledge_type}/{card.note_format}] {card.why_this_card}")
@@ -263,14 +263,14 @@ def cli_anki_check(cfg: Config) -> int:
     except AnkiUnavailableError as e:
         print(str(e), file=sys.stderr)
         return 1
-    print(f"AnkiConnect reachable — reports protocol version {reported}")
+    print(f"AnkiConnect reachable - reports protocol version {reported}")
     print(f"decks: {', '.join(client.deck_names())}")
     problems = client.check_setup(cfg)
     if problems:
         for p in problems:
             print(f"PROBLEM: {p}")
         return 1
-    print("configured note models and fields all exist ✓")
+    print("configured note models and fields all exist - good to go")
     return 0
 
 
