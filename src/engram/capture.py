@@ -92,13 +92,24 @@ def _has_text_on_clipboard() -> bool:
 
 
 def _wait_for_modifier_release(timeout=1.0):
-    # if the user still holds ctrl+shift from the hotkey, our ctrl+c would
-    # land as ctrl+shift+c in the target app
+    # if the user still holds ctrl+alt from the hotkey, our ctrl+c would
+    # land as ctrl+alt+c in the target app
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if not any(user32.GetAsyncKeyState(vk) & 0x8000 for vk in VK_MODIFIERS):
             return
         time.sleep(0.01)
+
+
+def _force_release_modifiers():
+    # inject key-ups for ctrl/alt/shift so windows never ends up with a
+    # stuck logical modifier (which makes the user's own ctrl+c stop working)
+    for key in (Key.ctrl, Key.ctrl_l, Key.ctrl_r, Key.alt, Key.alt_l, Key.alt_r,
+                Key.shift, Key.shift_l, Key.shift_r):
+        try:
+            kbd.release(key)
+        except Exception:
+            pass
 
 
 def _poll_clipboard(timeout_ms: int) -> str:
@@ -126,9 +137,11 @@ def capture_selection(cfg: CaptureConfig) -> CaptureResult | None:
 
     pyperclip.copy("")
     _wait_for_modifier_release()
+    _force_release_modifiers()
     with kbd.pressed(Key.ctrl):
         kbd.press("c")
         kbd.release("c")
+    _force_release_modifiers()
     txt = _poll_clipboard(cfg.clipboard_timeout_ms)
 
     if saved is not None:
