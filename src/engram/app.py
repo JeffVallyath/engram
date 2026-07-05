@@ -76,9 +76,15 @@ class App:
         self.root = tk.Tk()
         self.root.withdraw()
         self.anki = AnkiClient(cfg.anki.url)
-        self.client = make_client(cfg)  # None in manual mode
         self.busy = False  # a picker or review dialog is open
         self.tray = None
+        # a missing key or sdk must not kill the app — fall back to manual mode
+        self.client = None
+        self.llm_error = None
+        try:
+            self.client = make_client(cfg)  # None in manual mode
+        except (MissingAPIKeyError, LLMDraftError) as e:
+            self.llm_error = str(e)
 
     # background threads -> queue
 
@@ -360,6 +366,12 @@ class App:
         hotkey.register(self.cfg.hotkey.combo, self.on_hotkey)
         hotkey.register(self.cfg.hotkey.snap_combo, self.on_snap_hotkey)
         self.make_tray()
+        if self.llm_error:
+            log.warning("llm drafting disabled: %s", self.llm_error)
+            messagebox.showwarning(
+                "engram", f"LLM drafting disabled — {self.llm_error}\n\n"
+                "Running in manual mode until this is fixed (captures still work, "
+                "you write the cards yourself).")
         log.info("engram started: hotkey=%s snap=%s provider=%s deck=%s",
                  self.cfg.hotkey.combo, self.cfg.hotkey.snap_combo,
                  self.cfg.llm.provider, self.cfg.anki.deck)
