@@ -30,12 +30,24 @@ CORRECTIVE_MESSAGE = (
 )
 
 
+def output_budget(max_cards: int) -> int:
+    # the reply must fit N cards of JSON plus the model's thinking tokens —
+    # a fixed 2048 silently truncated everything above ~5 cards
+    return min(3000 + 600 * max_cards, 16000)
+
+
 def strip_fences(text: str) -> str:
     return FENCE_RE.sub("", text.strip()).strip()
 
 
 def parse_draft_json(text: str) -> CardDraftList:
     cleaned = strip_fences(text)
+    if not cleaned:
+        raise LLMDraftError(
+            "model returned an empty response — it likely ran out of output "
+            "tokens. Try fewer cards, or report this if it keeps happening.",
+            raw_text=text,
+        )
     try:
         return CardDraftList.model_validate_json(cleaned)
     except ValidationError as e:

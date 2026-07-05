@@ -5,7 +5,7 @@ import os
 from ..config import Config
 from ..models import CardDraftList, DraftRequest
 from ..router import build_system_prompt, build_user_prompt
-from .base import LLMDraftError, MissingAPIKeyError, draft_with_retry
+from .base import LLMDraftError, MissingAPIKeyError, draft_with_retry, output_budget
 
 
 class AnthropicClient:
@@ -39,11 +39,13 @@ class AnthropicClient:
             })
         content.append({"type": "text", "text": user})
 
+        budget = output_budget(req.max_cards)
+
         # structured-output path first, plain text + retry as fallback
         try:
             resp = self.sdk.messages.parse(
                 model=self.model,
-                max_tokens=2048,
+                max_tokens=budget,
                 system=system,
                 messages=[{"role": "user", "content": content}],
                 output_format=CardDraftList,
@@ -60,7 +62,7 @@ class AnthropicClient:
             if corrective:
                 msgs.append({"role": "user", "content": corrective})
             resp = self.sdk.messages.create(
-                model=self.model, max_tokens=2048, system=system, messages=msgs
+                model=self.model, max_tokens=budget, system=system, messages=msgs
             )
             return next((b.text for b in resp.content if b.type == "text"), "")
 

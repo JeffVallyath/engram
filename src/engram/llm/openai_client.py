@@ -5,7 +5,7 @@ import os
 from ..config import Config
 from ..models import CardDraftList, DraftRequest
 from ..router import build_system_prompt, build_user_prompt
-from .base import LLMDraftError, MissingAPIKeyError, draft_with_retry
+from .base import LLMDraftError, MissingAPIKeyError, draft_with_retry, output_budget
 
 DEFAULT_MODEL = "gpt-4o-mini"
 
@@ -53,7 +53,7 @@ class OpenAIClient:
                 model=self.model,
                 messages=msgs,
                 response_format={"type": "json_object"},
-                max_tokens=2048,
+                max_tokens=output_budget(req.max_cards),
             )
             return resp.choices[0].message.content or ""
 

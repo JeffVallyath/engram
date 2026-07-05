@@ -61,6 +61,19 @@ def test_invalid_json_raises_with_raw_text():
     assert "sorry" in err.value.raw_text
 
 
+def test_empty_response_gets_a_plain_language_error():
+    with pytest.raises(LLMDraftError, match="ran out of output tokens"):
+        parse_draft_json("")
+
+
+def test_output_budget_scales_with_cards():
+    from engram.llm.base import output_budget
+
+    assert output_budget(2) < output_budget(20)
+    assert output_budget(20) >= 12000  # 20 cards of json + thinking must fit
+    assert output_budget(1000) == 16000  # capped
+
+
 def test_retry_recovers_after_one_bad_response():
     calls = []
 
