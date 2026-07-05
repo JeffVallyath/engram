@@ -24,13 +24,18 @@ DIM = "#9a9aa6"
 ACCENT = "#4f8cc9"
 
 
+CARDS_LIMIT = 5
+
+
 class TypePicker:
-    def __init__(self, root, capture: CaptureResult, on_submit: Callable, on_cancel: Callable, initial_note=""):
+    def __init__(self, root, capture: CaptureResult, on_submit: Callable, on_cancel: Callable,
+                 initial_note="", initial_cards=2):
         self.on_submit = on_submit
         self.on_cancel = on_cancel
         self.picked = "concept"
         self.labels = {}
         self.hint_showing = False
+        self.cards_n = max(1, min(initial_cards, CARDS_LIMIT))
 
         top = tk.Toplevel(root)
         self.top = top
@@ -61,12 +66,27 @@ class TypePicker:
             self.labels[kt] = lbl
         self._pick(self.picked)
 
-        tk.Label(top, text="1-6 pick type · 0 skip (no card) · Enter draft · Esc cancel",
+        cards_row = tk.Frame(top, bg=BG)
+        cards_row.pack(anchor="w", pady=(4, 2))
+        tk.Label(cards_row, text="max cards:", bg=BG, fg=DIM, font=("Segoe UI", 9)).pack(side="left")
+        minus = tk.Label(cards_row, text=" − ", bg=BG, fg=FG, font=("Segoe UI", 10, "bold"), cursor="hand2")
+        minus.pack(side="left")
+        minus.bind("<Button-1>", lambda _e: self._bump_cards(-1))
+        self.cards_lbl = tk.Label(cards_row, text=str(self.cards_n), bg=ACCENT, fg=FG,
+                                  font=("Segoe UI", 9, "bold"), padx=6)
+        self.cards_lbl.pack(side="left")
+        plus = tk.Label(cards_row, text=" + ", bg=BG, fg=FG, font=("Segoe UI", 10, "bold"), cursor="hand2")
+        plus.pack(side="left")
+        plus.bind("<Button-1>", lambda _e: self._bump_cards(1))
+
+        tk.Label(top, text="1-6 pick type · ↑↓ max cards · 0 skip (no card) · Enter draft · Esc cancel",
                  bg=BG, fg=DIM, font=("Segoe UI", 8)).pack(anchor="w", pady=(6, 0))
 
         for key, (kt, _label) in TYPE_KEYS.items():
             top.bind(f"<KeyPress-{key}>", lambda e, t=kt: self._on_digit(e, t))
         top.bind("<KeyPress-0>", self._on_zero)
+        top.bind("<Up>", lambda _e: self._bump_cards(1))
+        top.bind("<Down>", lambda _e: self._bump_cards(-1))
         top.bind("<Return>", lambda _e: self._submit())
         top.bind("<Escape>", lambda _e: self._cancel())
 
@@ -110,6 +130,10 @@ class TypePicker:
         for t, lbl in self.labels.items():
             lbl.configure(fg=FG if t == kt else DIM, bg=ACCENT if t == kt else BG)
 
+    def _bump_cards(self, delta):
+        self.cards_n = max(1, min(self.cards_n + delta, CARDS_LIMIT))
+        self.cards_lbl.configure(text=str(self.cards_n))
+
     def _place_near_pointer(self, root):
         self.top.update_idletasks()
         x, y = root.winfo_pointerx() + 12, root.winfo_pointery() + 12
@@ -121,7 +145,7 @@ class TypePicker:
     def _submit(self):
         note = self._note_text()
         self.top.destroy()
-        self.on_submit(self.picked, note)
+        self.on_submit(self.picked, note, self.cards_n)
 
     def _cancel(self):
         self.top.destroy()

@@ -44,14 +44,14 @@ def only_instance() -> bool:
     return ctypes.windll.kernel32.GetLastError() != ERROR_ALREADY_EXISTS
 
 
-def build_request(capture: CaptureResult, kt: str, note: str, cfg: Config) -> DraftRequest:
+def build_request(capture: CaptureResult, kt: str, note: str, cfg: Config, n=None) -> DraftRequest:
     return DraftRequest(
         knowledge_type=kt,
         selected_text=capture.text,
         user_note=note,
         window_title=capture.window_title,
         app_class=capture.app_class,
-        max_cards=cfg.llm.max_cards,
+        max_cards=n or cfg.llm.max_cards,
     )
 
 
@@ -126,7 +126,7 @@ class App:
             pass
         self.root.after(100, self.poll)
 
-    def handle_capture(self, capture, initial_note=""):
+    def handle_capture(self, capture, initial_note="", initial_cards=None):
         from .ui.picker import TypePicker
 
         if capture is None:
@@ -136,9 +136,10 @@ class App:
             return
         self.busy = True
 
-        def on_submit(kt, note):
-            req = build_request(capture, kt, note, self.cfg)
-            log.info("capture accepted: type=%s app=%s chars=%d", kt, capture.app_class, len(capture.text))
+        def on_submit(kt, note, n):
+            req = build_request(capture, kt, note, self.cfg, n)
+            log.info("capture accepted: type=%s app=%s chars=%d cards<=%d",
+                     kt, capture.app_class, len(capture.text), n)
             if self.client is None:
                 self.open_review(req, draft_outcome(None, req, self.cfg))
             else:
@@ -148,7 +149,8 @@ class App:
         def on_cancel():
             self.busy = False
 
-        TypePicker(self.root, capture, on_submit, on_cancel, initial_note=initial_note)
+        TypePicker(self.root, capture, on_submit, on_cancel, initial_note=initial_note,
+                   initial_cards=initial_cards or self.cfg.llm.max_cards)
 
     def handle_snap(self, ev: SnapEvent):
         from .snap import grab_region, to_b64_png
@@ -163,7 +165,7 @@ class App:
         self.busy = False
         self.snap_picker(ev, to_b64_png(img))
 
-    def snap_picker(self, ev: SnapEvent, img_b64: str, initial_note=""):
+    def snap_picker(self, ev: SnapEvent, img_b64: str, initial_note="", initial_cards=None):
         from .ui.picker import TypePicker
 
         self.busy = True
@@ -172,17 +174,17 @@ class App:
             app_class=ev.app_class, prior_clipboard_was_text=True,
         )
 
-        def on_submit(kt, note):
+        def on_submit(kt, note, n):
             req = DraftRequest(
                 knowledge_type=kt,
                 selected_text="",
                 user_note=note,
                 window_title=ev.window_title,
                 app_class=ev.app_class,
-                max_cards=self.cfg.llm.max_cards,
+                max_cards=n,
                 image_b64=img_b64,
             )
-            log.info("snap accepted: type=%s app=%s", kt, ev.app_class)
+            log.info("snap accepted: type=%s app=%s cards<=%d", kt, ev.app_class, n)
             if self.client is None:
                 self.open_review(req, draft_outcome(None, req, self.cfg))
             else:
@@ -192,7 +194,8 @@ class App:
         def on_cancel():
             self.busy = False
 
-        TypePicker(self.root, capture, on_submit, on_cancel, initial_note=initial_note)
+        TypePicker(self.root, capture, on_submit, on_cancel, initial_note=initial_note,
+                   initial_cards=initial_cards or self.cfg.llm.max_cards)
 
     def open_review(self, req: DraftRequest, outcome: ValidationOutcome):
         from .ui.approval import ApprovalDialog
@@ -205,7 +208,7 @@ class App:
                 note = note if note is not None else req.user_note
                 if req.image_b64:
                     self.snap_picker(SnapEvent(req.window_title, req.app_class),
-                                     req.image_b64, initial_note=note)
+                                     req.image_b64, initial_note=note, initial_cards=req.max_cards)
                     return
                 capture = CaptureResult(
                     text=req.selected_text,
@@ -213,7 +216,7 @@ class App:
                     app_class=req.app_class,
                     prior_clipboard_was_text=True,
                 )
-                self.handle_capture(capture, initial_note=note)
+                self.handle_capture(capture, initial_note=note, initial_cards=req.max_cards)
 
         ApprovalDialog(self.root, req, outcome, self.anki, self.cfg, on_done)
 
@@ -295,7 +298,7 @@ def cli_draft(cfg: Config, args) -> int:
         user_note=args.note or "",
         window_title="(cli)",
         app_class="cli",
-        max_cards=cfg.llm.max_cards,
+        max_cards=args.cards or cfg.llm.max_cards,
     )
     try:
         outcome = draft_outcome(make_client(cfg), req, cfg)
@@ -379,10 +382,10 @@ def cli_ui_test(cfg: Config) -> int:
         window_title="ui-test", app_class="test", prior_clipboard_was_text=True,
     )
 
-    def on_submit(kt, note):
+    def on_submit(kt, note, n):
         from .ui.approval import ApprovalDialog
 
-        req = build_request(capture, kt, note, cfg)
+        req = build_request(capture, kt, note, cfg, n)
         outcome = validate_drafts(FakeClient().draft_cards(req), cfg.cards, req.max_cards)
         ApprovalDialog(root, req, outcome, DryRunAnki(), cfg, lambda *_: root.quit())
 
@@ -399,6 +402,7 @@ def main(argv=None) -> int:
     parser.add_argument("--type", default="concept",
                         choices=["fact", "concept", "procedure", "formula", "cloze", "custom"])
     parser.add_argument("--note", help="memory-target note for --draft")
+    parser.add_argument("--cards", type=int, help="max cards for --draft (default from config)")
     parser.add_argument("--provider", help="override llm.provider for this run (e.g. fake, manual)")
     parser.add_argument("--anki-check", action="store_true", help="check AnkiConnect, deck, models and fields")
     parser.add_argument("--capture-test", action="store_true", help="print captures to the console")
