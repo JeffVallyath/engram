@@ -113,3 +113,32 @@ def test_prompt_injection_in_capture_cannot_raise_card_count():
     outcome = validate_drafts(CardDraftList(cards=hostile_cards), cfg.cards, cfg.llm.max_cards)
     assert len(outcome.accepted) == cfg.llm.max_cards
     assert len(outcome.dropped) == 20 - cfg.llm.max_cards
+
+
+def test_redraft_ceiling_caps_at_target_count():
+    """A 'draft omitted' redraft can add at most one card per named target,
+    even if the model runs a fresh coverage pass anyway (16 cards for 5
+    targets, observed 2026-07-06)."""
+    from engram.app import draft_outcome
+    from engram.models import CardDraft, CardDraftList, DraftRequest
+
+    cfg = Config()
+
+    class OverEagerClient:
+        def draft_cards(self, req):
+            return CardDraftList(cards=[
+                CardDraft(knowledge_type="fact", note_format="basic",
+                          front=f"Question {i}?", back="x")
+                for i in range(16)
+            ])
+
+    req = DraftRequest(
+        knowledge_type="auto", selected_text="doc", user_note="",
+        window_title="w", app_class="file", max_cards=30, ingest=True,
+        redraft_targets=("author of quote A", "book B", "author C",
+                         "book D", "quote E source"),
+    )
+    outcome = draft_outcome(OverEagerClient(), req, cfg)
+    assert len(outcome.accepted) == 5
+    assert len(outcome.dropped) == 11
+    assert all("ceiling" in d.reason for d in outcome.dropped)

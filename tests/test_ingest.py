@@ -127,3 +127,28 @@ def test_prompt_parts_keep_note_out_of_source():
     assert "Abstract... Results..." in src1 and "Abstract... Results..." not in task1
     # single-string form is the two parts joined
     assert build_user_prompt(make("")) == f"{task1}\n\n{src1}"
+
+
+def test_redraft_replaces_coverage_directive_and_keeps_source_stable():
+    from dataclasses import replace as dc_replace
+
+    from engram.router import build_user_prompt_parts
+
+    req = DraftRequest(
+        knowledge_type="auto", selected_text="Abstract... Results...",
+        user_note="", window_title="paper.pdf", app_class="file",
+        max_cards=30, ingest=True,
+    )
+    redraft = dc_replace(req, redraft_targets=("author of quote A", "book B"))
+
+    src_full, task_full = build_user_prompt_parts(req)
+    src_re, task_re = build_user_prompt_parts(redraft)
+
+    # source part byte-identical, or the anthropic cache prefix never hits
+    assert src_re == src_full
+    # coverage pass replaced by the narrow redraft directive
+    assert "REDRAFT OF OMITTED TARGETS" in task_re
+    assert "COVERAGE" not in task_re
+    assert "- author of quote A" in task_re and "- book B" in task_re
+    assert "at most 2 cards" in task_re
+    assert "set omitted_targets to []" in task_re

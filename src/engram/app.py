@@ -98,7 +98,12 @@ def draft_outcome(client, req: DraftRequest, cfg: Config) -> ValidationOutcome:
             accepted=template_drafts(req),
             warnings=["manual mode — fill in the template before adding"],
         )
-    outcome = validate_drafts(client.draft_cards(req), cfg.cards, req.max_cards)
+    # a redraft may draft at most one card per named target, whatever the
+    # model returns — the prompt says so, the ceiling enforces it
+    ceiling = req.max_cards
+    if req.redraft_targets:
+        ceiling = min(ceiling, len(req.redraft_targets))
+    outcome = validate_drafts(client.draft_cards(req), cfg.cards, ceiling)
     log.info("draft outcome: accepted=%d dropped=%d omitted=%d warnings=%d rejected=%s",
              len(outcome.accepted), len(outcome.dropped), len(outcome.omitted),
              len(outcome.warnings), "yes" if outcome.reject_reason else "no")
@@ -353,8 +358,8 @@ class App:
                 # redraft the omitted targets, keeping the approved cards + deck
                 from dataclasses import replace as dc_replace
 
-                kept, deck = carry
-                req2 = dc_replace(req, user_note=note)
+                kept, deck, targets = carry
+                req2 = dc_replace(req, redraft_targets=tuple(targets))
                 self.toast("Drafting omitted targets…")
                 threading.Thread(target=self.draft_worker, args=(req2,),
                                  kwargs={"carry": kept, "deck": deck}, daemon=True).start()
@@ -564,11 +569,14 @@ def cli_ingest(cfg: Config, args) -> int:
     def open_dialog(r, oc):
         def on_done(action, note=None, carry=None):
             if action in ("revise", "draft_more"):
-                r2 = dc_replace(r, user_note=note if note is not None else r.user_note)
+                # draft_more redrafts only the named omitted targets; a plain
+                # revise clears any previous redraft state and goes full-pass
+                r2 = dc_replace(r, user_note=note if note is not None else r.user_note,
+                                redraft_targets=tuple(carry[2]) if carry else ())
                 oc2 = draft(r2)
                 if oc2 is not None:
-                    if carry:  # draft_more: keep the approved cards + deck, add the new
-                        kept, deck = carry
+                    if carry:  # keep the approved cards + deck, add the new
+                        kept, deck, _targets = carry
                         oc2 = merge_carry(oc2, kept, deck)
                     open_dialog(r2, oc2)
                     return

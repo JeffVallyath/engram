@@ -47,6 +47,9 @@ class DraftRequest:
     max_cards: int
     image_b64: str = ""  # set for snap captures, empty for text captures
     ingest: bool = False  # true when the text is a whole document, not a selection
+    # non-empty = a "draft omitted" redraft: card ONLY these targets, at most
+    # one card each — never a fresh coverage pass over the source
+    redraft_targets: tuple[str, ...] = ()
 
 
 @dataclass

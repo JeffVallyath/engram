@@ -20,7 +20,7 @@ class ApprovalDialog:
         self.outcome = outcome
         self.anki = anki_client
         self.cfg = cfg
-        self.on_done = on_done  # ("closed"|"revise"|"draft_more", note, carry_cards)
+        self.on_done = on_done  # ("closed"|"revise"|"draft_more", note, (kept, deck, targets))
         self.rows = []
         self.sent = False
 
@@ -57,11 +57,12 @@ class ApprovalDialog:
     def _draft_more(self):
         # keep the cards already on screen, draft the omitted ones, and merge
         # them into one review so it all sends to anki in a single push. carry
-        # the deck the user chose so they don't have to re-pick it
+        # the deck the user chose so they don't have to re-pick it. the targets
+        # ride in the request as redraft_targets — a plain note asking for them
+        # proved too weak against the coverage directive (16 cards for 5 targets)
         kept = self._collect()
-        note = "Draft cards for these omitted targets: " + "; ".join(self.outcome.omitted)
         self.top.destroy()
-        self.on_done("draft_more", note, (kept, self._chosen_deck()))
+        self.on_done("draft_more", None, (kept, self._chosen_deck(), list(self.outcome.omitted)))
 
     def _build_cards(self, top):
         for w in self.outcome.warnings:
