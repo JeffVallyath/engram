@@ -105,3 +105,32 @@ def test_template_drafts_manual_mode():
 
     cloze = template_drafts(make_request(knowledge_type="cloze"))
     assert cloze[0].note_format == "cloze"
+
+
+def test_nanda_types_get_their_directives():
+    arche = build_user_prompt(make_request(knowledge_type="archetype"))
+    assert "ARCHETYPE mode" in arche and "attack plan" in arche
+    intu = build_user_prompt(make_request(knowledge_type="intuition"))
+    assert "INTUITION mode" in intu and "mental move" in intu
+    deriv = build_user_prompt(make_request(knowledge_type="derivation"))
+    assert "DERIVATION mode" in deriv and "non-obvious moves" in deriv
+
+
+def test_auto_mode_knows_the_new_types():
+    prompt = build_user_prompt(make_request(knowledge_type="auto"))
+    assert "archetype" in prompt and "derivation" in prompt and "intuition" in prompt
+
+
+def test_system_prompt_allows_lists_only_for_chunk_types():
+    prompt = build_system_prompt(2, 2)
+    assert "EXCEPTION: archetype and derivation" in prompt
+    assert "COUNT CUE" in prompt
+    assert "extra" in prompt
+
+
+def test_new_types_have_manual_templates():
+    for kt in ("archetype", "intuition", "derivation"):
+        drafts = template_drafts(make_request(knowledge_type=kt))
+        assert len(drafts) == 1
+        assert drafts[0].note_format == "basic"
+        assert drafts[0].knowledge_type == kt

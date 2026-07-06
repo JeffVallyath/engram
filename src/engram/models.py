@@ -5,7 +5,8 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, model_validator
 
-KnowledgeType = Literal["fact", "concept", "procedure", "formula", "cloze", "custom"]
+KnowledgeType = Literal["fact", "concept", "procedure", "formula", "cloze", "custom",
+                        "archetype", "intuition", "derivation"]
 NoteFormat = Literal["basic", "cloze"]
 
 
@@ -14,6 +15,9 @@ class CardDraft(BaseModel):
     note_format: NoteFormat
     front: str
     back: str = ""
+    # subtlety / mnemonic / why-it-works note shown alongside the answer in
+    # anki (dim, below the back) — never part of the graded recall target
+    extra: str = ""
     tags: list[str] = Field(default_factory=list)
     why_this_card: str = ""  # shown in the review dialog, never sent to anki
 

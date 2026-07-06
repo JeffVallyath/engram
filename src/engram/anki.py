@@ -130,7 +130,13 @@ class AnkiClient:
 
     def _note(self, card: CardDraft, cfg: Config, tags: list[str], img_tag="", deck=None) -> dict:
         a = cfg.anki
-        back = card.back + img_tag
+        back = card.back
+        if card.extra.strip():
+            # subtlety/mnemonic rider: visible with the answer, visually not
+            # part of the graded recall target
+            back += ('<br><br><span style="color:#8a8a8a;font-size:90%">'
+                     f"{card.extra.strip()}</span>")
+        back += img_tag
         if card.note_format == "cloze":
             model, fields = a.cloze_model, {a.cloze_text_field: card.front, a.cloze_extra_field: back}
         else:

@@ -96,3 +96,19 @@ def test_omitted_targets_pass_through():
 def test_no_omitted_targets_means_empty_list():
     outcome = run(card())
     assert outcome.omitted == []
+
+
+def test_long_back_warns_except_for_chunk_types():
+    long_back = "1. step one 2. step two 3. step three " * 20
+    warned = run(card(back=long_back))
+    assert any("back exceeds" in w for w in warned.warnings)
+
+    for kt in ("archetype", "derivation"):
+        outcome = run(card(knowledge_type=kt, front="How to solve X? (3)", back=long_back))
+        assert len(outcome.accepted) == 1
+        assert not any("back exceeds" in w for w in outcome.warnings)
+
+
+def test_motivate_front_is_a_valid_prompt():
+    outcome = run(card(knowledge_type="intuition", front="Motivate the Hausdorff condition", back="limits are unique"))
+    assert len(outcome.accepted) == 1

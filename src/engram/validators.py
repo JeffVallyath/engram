@@ -12,9 +12,13 @@ DEMONSTRATIVE_RE = re.compile(r"^\s*(this|that|these|those)\b", re.IGNORECASE)
 PROMPT_VERBS = {
     "explain", "define", "name", "list", "describe", "state", "give", "compare",
     "distinguish", "derive", "prove", "identify", "summarize", "contrast",
-    "recall", "complete", "fill", "translate", "convert", "solve",
+    "recall", "complete", "fill", "translate", "convert", "solve", "motivate",
     "when", "why", "what", "how", "who", "where", "which", "under", "in",
 }
+
+# the atom for these types is a whole attack plan / argument skeleton, so a
+# long back is the design, not a pasted paragraph
+CHUNK_TYPES = ("archetype", "derivation")
 
 
 def _is_prompt(front: str) -> bool:
@@ -50,7 +54,7 @@ def _nitpicks(card: CardDraft, cfg: CardsConfig) -> list[str]:
     label = f'"{front[:40]}..."' if len(front) > 40 else f'"{front}"'
     if len(front) > cfg.front_max_chars:
         warns.append(f"{label}: front exceeds {cfg.front_max_chars} chars")
-    if len(card.back) > cfg.back_max_chars:
+    if len(card.back) > cfg.back_max_chars and card.knowledge_type not in CHUNK_TYPES:
         warns.append(f"{label}: back exceeds {cfg.back_max_chars} chars — likely a pasted paragraph")
     if card.note_format == "cloze":
         deletions = {m.group(1) for m in CLOZE_RE.finditer(front)}

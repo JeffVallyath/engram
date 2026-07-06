@@ -148,6 +148,24 @@ def test_cloze_cards_use_cloze_model_and_fields():
     assert note["fields"] == {"Text": "X is {{c1::Y}}.", "Back Extra": "extra"}
 
 
+@responses.activate
+def test_extra_rider_lands_dim_below_back():
+    captured = {}
+
+    def can_add(payload):
+        captured["notes"] = payload["params"]["notes"]
+        return [True]
+
+    add_rpc({"version": 6, "createDeck": 1, "canAddNotes": can_add, "addNotes": [8]})
+    c = card(knowledge_type="archetype", front="How to solve X? (2)",
+             back="1. reduce 2. recurse", extra="Note: only normalise at the end")
+    AnkiClient(URL).add_cards([c], CFG, "pdf", "w")
+    back = captured["notes"][0]["fields"]["Back"]
+    assert back.startswith("1. reduce 2. recurse")
+    assert "only normalise at the end" in back
+    assert "color:#8a8a8a" in back  # dim rider, visually not the recall target
+
+
 def test_sanitize_tag_strips_spaces_and_junk():
     assert sanitize_tag("my secret doc.pdf - Adobe") == "my_secret_doc.pdf_-_Adobe"
     assert " " not in sanitize_tag("a b c")

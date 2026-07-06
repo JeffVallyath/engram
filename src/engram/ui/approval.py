@@ -117,7 +117,14 @@ class ApprovalDialog:
                            insertbackground=FG, font=("Segoe UI", 10), relief="flat", wrap="word")
             back.insert("1.0", card.back)
             back.pack(fill="x")
-            self.rows.append((include, front, back, card))
+            extra = None
+            if card.extra:
+                # subtlety/mnemonic note — lands in anki dimly under the back
+                extra = tk.Text(frm, height=2, width=70, bg="#222228", fg=DIM,
+                                insertbackground=FG, font=("Segoe UI", 9), relief="flat", wrap="word")
+                extra.insert("1.0", card.extra)
+                extra.pack(fill="x", pady=(2, 0))
+            self.rows.append((include, front, back, extra, card))
 
         self._build_deck_row(top)
 
@@ -177,12 +184,13 @@ class ApprovalDialog:
 
     def _collect(self) -> list[CardDraft]:
         cards = []
-        for include, front, back, card in self.rows:
+        for include, front, back, extra, card in self.rows:
             if not include.get():
                 continue
             edited = card.model_copy(update={
                 "front": front.get("1.0", "end-1c").strip(),
                 "back": back.get("1.0", "end-1c").strip(),
+                "extra": extra.get("1.0", "end-1c").strip() if extra else card.extra,
             })
             if edited.front:
                 cards.append(edited)

@@ -18,6 +18,9 @@ TYPE_KEYS = {
     "4": ("formula", "4 Formula"),
     "5": ("cloze", "5 Cloze"),
     "6": ("custom", "6 Custom"),
+    "8": ("archetype", "8 Archetype"),
+    "9": ("intuition", "9 Intuition"),
+    "0": ("derivation", "0 Derivation"),
 }
 PICKABLE = {kt for kt, _ in TYPE_KEYS.values()}
 
@@ -55,13 +58,16 @@ class TypePicker:
             self._show_hint()
         self.note.bind("<FocusIn>", self._hide_hint)
 
-        row = tk.Frame(top, bg=BG)
-        row.pack(anchor="w", pady=(8, 2))
-        for key, (kt, label) in TYPE_KEYS.items():
-            lbl = tk.Label(row, text=label, bg=BG, fg=DIM, font=("Segoe UI", 9), padx=6, pady=2, cursor="hand2")
-            lbl.pack(side="left", padx=2)
-            lbl.bind("<Button-1>", lambda _e, t=kt: self._pick(t))
-            self.labels[kt] = lbl
+        entries = list(TYPE_KEYS.values())
+        for chunk in (entries[:5], entries[5:]):
+            row = tk.Frame(top, bg=BG)
+            row.pack(anchor="w", pady=(4, 0))
+            for kt, label in chunk:
+                lbl = tk.Label(row, text=label, bg=BG, fg=DIM, font=("Segoe UI", 9),
+                               padx=6, pady=2, cursor="hand2")
+                lbl.pack(side="left", padx=2)
+                lbl.bind("<Button-1>", lambda _e, t=kt: self._pick(t))
+                self.labels[kt] = lbl
         self._pick(self.picked)
 
         cards_row = tk.Frame(top, bg=BG)
@@ -77,12 +83,11 @@ class TypePicker:
         plus.pack(side="left")
         plus.bind("<Button-1>", lambda _e: self._bump_cards(1))
 
-        tk.Label(top, text="1-7 pick type · ↑↓ max cards · 0 skip (no card) · Enter draft · Esc cancel",
+        tk.Label(top, text="1-9,0 pick type · ↑↓ max cards · Enter draft · Esc cancel",
                  bg=BG, fg=DIM, font=("Segoe UI", 8)).pack(anchor="w", pady=(6, 0))
 
         for key, (kt, _label) in TYPE_KEYS.items():
             top.bind(f"<KeyPress-{key}>", lambda e, t=kt: self._on_digit(e, t))
-        top.bind("<KeyPress-0>", self._on_zero)
         top.bind("<Up>", lambda _e: self._bump_cards(1))
         top.bind("<Down>", lambda _e: self._bump_cards(-1))
         top.bind("<Return>", lambda _e: self._submit())
@@ -114,12 +119,6 @@ class TypePicker:
         self._hide_hint()
         self.note.focus_set()
         self._pick(kt)
-        return "break"
-
-    def _on_zero(self, event):
-        if event.widget is self.note and not self.hint_showing:
-            return None
-        self._cancel()
         return "break"
 
     def _pick(self, kt):

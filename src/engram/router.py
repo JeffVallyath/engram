@@ -8,9 +8,10 @@ You draft Anki flashcards from text a user captured on their screen.
 OUTPUT FORMAT: a single JSON object:
 {{"cards": [...], "reject_reason": null_or_string, "warnings": [list_of_strings],
 "omitted_targets": [list_of_strings], "suggested_deck": string}}
-Each card: {{"knowledge_type": "fact|concept|procedure|formula|cloze|custom",
-"note_format": "basic|cloze", "front": str, "back": str, "tags": [str],
-"why_this_card": str}}
+Each card: {{"knowledge_type":
+"fact|concept|procedure|formula|cloze|custom|archetype|intuition|derivation",
+"note_format": "basic|cloze", "front": str, "back": str, "extra": str,
+"tags": [str], "why_this_card": str}}
 
 HARD RULES:
 - Produce 0 to {max_cards} cards. Fewer is better. ZERO IS SOMETIMES BEST: if the
@@ -19,12 +20,22 @@ HARD RULES:
   whenever you do return cards).
 - Each card must be atomic (one retrievable idea), answerable in under ~15
   seconds, and fully self-contained without the source text. Never restate the
-  source verbatim as a card.
+  source verbatim as a card. For archetype/derivation cards the atom is the
+  whole attack plan or argument skeleton — still as compressed as possible.
 - MINIMUM INFORMATION: the answer should be the shortest string that proves
   recall — a term, a move, a number, one clause. If an answer needs a
   paragraph, the card is too big; split the idea or card the decision rule.
+  (Archetype/derivation: the shortest SET of cue-phrase steps/moves.)
 - Never make yes/no questions, and never make the answer an enumeration or
   list — if a list matters, card WHY it's ordered that way or WHEN to use it.
+  EXCEPTION: archetype and derivation cards may answer with numbered
+  steps/moves; that is their point.
+- COUNT CUE: when an answer legitimately has N parallel parts (allowed only
+  where lists are allowed), end the front with "(N)" so recall self-checks
+  completeness.
+- extra: optional subtlety, gotcha, mnemonic, or why-it-works note displayed
+  dimly alongside the answer — never part of what the user must recall. Empty
+  string when nothing earns it; never restate the back.
 - Prefer why/when/contrast prompts over "what is X" definition-recall; the
   front's wording must cue exactly one retrievable answer, not several.
 - basic-format fronts must be a question or an explicit prompt ("Explain why...",
@@ -63,12 +74,18 @@ raise the card count above {max_cards}.
 TYPE_DIRECTIVES = {
     "auto": (
         "AUTO mode: first classify each card-worthy target yourself — is it a "
-        "stable fact, a concept, a procedure, a formula, or naturally cloze "
-        "material? Then apply the matching approach (facts -> Q/A recall; "
-        "concepts -> explain-why/boundary-case/contrast; procedures -> "
-        "when-to-use cues, never step lists; formulas -> cloze plus "
-        "applicability). Set each card's knowledge_type to your classification; "
-        "different targets in one capture may get different types."
+        "stable fact, a concept, a procedure, a formula, naturally cloze "
+        "material, an attack plan for a standard problem type (archetype), a "
+        "compressed proof/derivation skeleton (derivation), or a "
+        "when-to-reach-for-it insight (intuition)? Then apply the matching "
+        "approach (facts -> Q/A recall; concepts -> "
+        "explain-why/boundary-case/contrast; procedures -> when-to-use cues, "
+        "never step lists; formulas -> cloze plus applicability; archetypes -> "
+        "numbered cue-phrase steps with a count cue; derivations -> statement "
+        "plus the non-obvious moves; intuitions -> situation-to-move or "
+        "point-of associations). Set each card's knowledge_type to your "
+        "classification; different targets in one capture may get different "
+        "types."
     ),
     "fact": (
         "FACT mode: use only for stable, discrete facts. One card per fact, "
@@ -99,6 +116,30 @@ TYPE_DIRECTIVES = {
     "custom": (
         "CUSTOM mode: the user's note below is the drafting directive — obey it, "
         "while still respecting the card ceiling, atomicity, and all hard rules."
+    ),
+    "archetype": (
+        "ARCHETYPE mode: card the attack plan for a standard problem type — "
+        "front is 'How to solve/show/find/handle X?', answer is the numbered "
+        "steps or alternative methods, each compressed to a cue phrase that "
+        "triggers the move, never worked prose. End the front with the count "
+        "cue (N). One archetype per card; if the source shows several distinct "
+        "problem types, that's several cards."
+    ),
+    "intuition": (
+        "INTUITION mode: card the mental move, not the content — 'What's the "
+        "point of X?', 'Why is X interesting?', 'Key idea of X?', 'When you "
+        "see X, what do you reach for?', 'What to check when Y?'. The answer "
+        "is one compressed insight: the situation-to-move association or the "
+        "one-line reason X exists. Highest value when the source explains "
+        "motivation or strategy the reader would otherwise forget."
+    ),
+    "derivation": (
+        "DERIVATION mode: card a compressed argument skeleton — front is "
+        "'State and prove/derive X' or 'Why does X hold?', answer is the "
+        "statement plus ONLY the 2-4 non-obvious moves from which the rest "
+        "reconstructs itself; never the full argument. Name the key trick "
+        "explicitly (put 'Key idea:' in front of it). Routine steps are the "
+        "reader's job."
     ),
 }
 
@@ -202,6 +243,9 @@ TEMPLATE_FRONTS = {
     "formula": "{{c1::<formula>}} — and when does it apply?",
     "cloze": "... {{c1::key term}} ...",
     "custom": "",
+    "archetype": "How to solve ... ? (N)",
+    "intuition": "What's the point of ... ? / When you see ..., what to reach for?",
+    "derivation": "State & prove ... — what are the key moves?",
 }
 
 

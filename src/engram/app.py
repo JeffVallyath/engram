@@ -650,7 +650,8 @@ def main(argv=None) -> int:
     parser.add_argument("--version", action="version", version=f"engram {__version__}")
     parser.add_argument("--draft", metavar="TEXT", help="draft cards for TEXT on the console (no UI)")
     parser.add_argument("--type", default="auto",
-                        choices=["auto", "fact", "concept", "procedure", "formula", "cloze", "custom"])
+                        choices=["auto", "fact", "concept", "procedure", "formula", "cloze",
+                                 "custom", "archetype", "intuition", "derivation"])
     parser.add_argument("--note", help="memory-target note for --draft")
     parser.add_argument("--cards", type=int, help="max cards for --draft (default from config)")
     parser.add_argument("--provider", help="override llm.provider for this run (e.g. fake, manual)")
