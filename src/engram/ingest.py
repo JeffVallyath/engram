@@ -23,6 +23,24 @@ class IngestError(Exception):
     pass
 
 
+def load_source(source: str) -> tuple[str, str]:
+    """Route an ingest source (file path or YouTube link) to its extractor.
+
+    Returns (text, display_name) — the name a human would recognize the
+    source by: filename for files, video title for videos."""
+    from .transcript import fetch_transcript, is_video_url
+
+    if is_video_url(source):
+        tr = fetch_transcript(source)
+        return tr.text, tr.title
+    if source.lower().startswith(("http://", "https://")):
+        raise IngestError(
+            "only YouTube links are supported for URL ingest — for other pages, "
+            "save as html/pdf and ingest the file"
+        )
+    return extract_text(source), Path(source).name
+
+
 def extract_text(path: str) -> str:
     p = Path(path)
     if not p.exists():

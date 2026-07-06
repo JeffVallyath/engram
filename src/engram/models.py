@@ -91,9 +91,15 @@ class IngestPickEvent:
 
 
 @dataclass
+class IngestLinkEvent:
+    pass
+
+
+@dataclass
 class IngestReady:
     text: str
     filename: str
+    app_class: str = "file"
 
 
 @dataclass

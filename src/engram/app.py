@@ -27,6 +27,7 @@ from .models import (
     DraftReady,
     DraftRequest,
     IngestFailed,
+    IngestLinkEvent,
     IngestPickEvent,
     IngestReady,
     QuitEvent,
@@ -163,8 +164,10 @@ class App:
                     self.handle_snap(ev)
                 elif isinstance(ev, IngestPickEvent):
                     self.pick_ingest_file()
+                elif isinstance(ev, IngestLinkEvent):
+                    self.ask_ingest_link()
                 elif isinstance(ev, IngestReady):
-                    self.ingest_picker(ev.text, ev.filename)
+                    self.ingest_picker(ev.text, ev.filename, ev.app_class)
                 elif isinstance(ev, IngestFailed):
                     messagebox.showerror("engram — ingest failed", ev.message)
                 elif isinstance(ev, DraftReady):
@@ -245,17 +248,22 @@ class App:
         TypePicker(self.root, capture, on_submit, on_cancel, initial_note=initial_note,
                    initial_cards=initial_cards or self.cfg.llm.max_cards)
 
+    def can_ingest(self) -> bool:
+        if self.busy:
+            return False
+        if self.client is None:
+            messagebox.showerror(
+                "engram", "Ingest needs an LLM provider — set llm.provider to "
+                "anthropic or openai in ~/.engram/config.toml.")
+            return False
+        return True
+
     def pick_ingest_file(self):
         from tkinter import filedialog
 
         from .ingest import FILETYPES, IngestError, extract_text
 
-        if self.busy:
-            return
-        if self.client is None:
-            messagebox.showerror(
-                "engram", "Ingest needs an LLM provider — set llm.provider to "
-                "anthropic or openai in ~/.engram/config.toml.")
+        if not self.can_ingest():
             return
         path = filedialog.askopenfilename(title="engram — ingest a file", filetypes=FILETYPES)
         if not path:
@@ -274,14 +282,40 @@ class App:
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def ingest_picker(self, text: str, filename: str, initial_note="", initial_cards=None):
+    def ask_ingest_link(self):
+        from tkinter import simpledialog
+
+        from .ingest import IngestError
+        from .transcript import fetch_transcript
+
+        if not self.can_ingest():
+            return
+        url = simpledialog.askstring(
+            "engram — ingest a video", "YouTube link:", parent=self.root)
+        if not url or not url.strip():
+            return
+        url = url.strip()
+        self.toast("Fetching transcript…")
+
+        def worker():
+            try:
+                tr = fetch_transcript(url)
+            except IngestError as e:
+                self.q.put(IngestFailed(str(e)))
+                return
+            self.q.put(IngestReady(tr.text, tr.title, "video"))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def ingest_picker(self, text: str, filename: str, app_class="file",
+                      initial_note="", initial_cards=None):
         from .ingest import BUDGET_LIMIT, DEFAULT_BUDGET
         from .ui.picker import TypePicker
 
         if self.busy:
             return
         self.busy = True
-        capture = CaptureResult(text=text, window_title=filename, app_class="file")
+        capture = CaptureResult(text=text, window_title=filename, app_class=app_class)
 
         def on_submit(kt, note, n):
             req = DraftRequest(
@@ -289,11 +323,11 @@ class App:
                 selected_text=text,
                 user_note=note,
                 window_title=filename,
-                app_class="file",
+                app_class=app_class,
                 max_cards=n,
                 ingest=True,
             )
-            log.info("ingest accepted: file=%s type=%s cards<=%d chars=%d",
+            log.info("ingest accepted: source=%s type=%s cards<=%d chars=%d",
                      filename, kt, n, len(text))
             self.toast(f"Drafting up to {n} cards from {filename}…")
             threading.Thread(target=self.draft_worker, args=(req,), daemon=True).start()
@@ -328,7 +362,7 @@ class App:
                                      req.image_b64, initial_note=note, initial_cards=req.max_cards)
                     return
                 if req.ingest:
-                    self.ingest_picker(req.selected_text, req.window_title,
+                    self.ingest_picker(req.selected_text, req.window_title, req.app_class,
                                        initial_note=note, initial_cards=req.max_cards)
                     return
                 capture = CaptureResult(
@@ -375,8 +409,12 @@ class App:
         def ingest_file(_icon, _item):
             self.q.put(IngestPickEvent())
 
+        def ingest_link(_icon, _item):
+            self.q.put(IngestLinkEvent())
+
         menu = pystray.Menu(
             pystray.MenuItem("Ingest a file…", ingest_file),
+            pystray.MenuItem("Ingest a video link…", ingest_link),
             pystray.MenuItem("Open config folder", open_config),
             pystray.MenuItem("Quit engram", quit_app),
         )
@@ -466,28 +504,29 @@ def cli_anki_check(cfg: Config) -> int:
 def cli_ingest(cfg: Config, args) -> int:
     from dataclasses import replace as dc_replace
 
-    from .ingest import BUDGET_LIMIT, DEFAULT_BUDGET, IngestError, extract_text
+    from .ingest import BUDGET_LIMIT, DEFAULT_BUDGET, IngestError, load_source
+    from .transcript import is_video_url
 
     client = make_client(cfg)
     if client is None:
         print("ingest needs an llm provider — set llm.provider to anthropic/openai "
               "(or fake to try the flow) in ~/.engram/config.toml", file=sys.stderr)
         return 2
+    if is_video_url(args.ingest):
+        print("fetching transcript...")
     try:
-        text = extract_text(args.ingest)
+        text, name = load_source(args.ingest)
     except IngestError as e:
         print(f"ingest error: {e}", file=sys.stderr)
         return 1
-
-    from pathlib import Path
 
     budget = min(args.cards or DEFAULT_BUDGET, BUDGET_LIMIT)
     req = DraftRequest(
         knowledge_type=args.type,
         selected_text=text,
         user_note=args.note or "",
-        window_title=Path(args.ingest).name,
-        app_class="file",
+        window_title=name,
+        app_class="video" if is_video_url(args.ingest) else "file",
         max_cards=budget,
         ingest=True,
     )
@@ -603,7 +642,8 @@ def main(argv=None) -> int:
     parser.add_argument("--note", help="memory-target note for --draft")
     parser.add_argument("--cards", type=int, help="max cards for --draft (default from config)")
     parser.add_argument("--provider", help="override llm.provider for this run (e.g. fake, manual)")
-    parser.add_argument("--ingest", metavar="FILE", help="draft a coverage card set from a pdf/txt/md file")
+    parser.add_argument("--ingest", metavar="FILE_OR_URL",
+                        help="draft a coverage card set from a pdf/txt/md file or a YouTube link")
     parser.add_argument("--print", action="store_true", help="with --ingest/--draft: console output, no review dialog")
     parser.add_argument("--anki-check", action="store_true", help="check AnkiConnect, deck, models and fields")
     parser.add_argument("--capture-test", action="store_true", help="print captures to the console")
@@ -613,6 +653,13 @@ def main(argv=None) -> int:
     from .logging_setup import setup_logging
 
     setup_logging()
+    try:
+        # windows consoles default to cp1252, which dies on transcript/card
+        # unicode (♪, math symbols) — degrade to replacement chars instead
+        sys.stdout.reconfigure(errors="replace")
+        sys.stderr.reconfigure(errors="replace")
+    except Exception:
+        pass
     try:
         # per-monitor dpi awareness so snap coordinates map 1:1 to pixels
         ctypes.windll.shcore.SetProcessDpiAwareness(2)
