@@ -12,10 +12,17 @@ def test_estimate_matches_by_prefix():
 
 
 def test_cache_reads_are_cheaper():
+    # in_tok is uncached input only; a fully-cached prefix reads at 0.1x
     full = costs.estimate("claude-sonnet-5", 10_000, 0)
-    cached = costs.estimate("claude-sonnet-5", 10_000, 0, cache_read=10_000)
+    cached = costs.estimate("claude-sonnet-5", 0, 0, cache_read=10_000)
     assert cached < full
     assert abs(cached - full * 0.1) < 1e-9
+
+
+def test_cache_writes_carry_the_surcharge():
+    full = costs.estimate("claude-sonnet-5", 10_000, 0)
+    written = costs.estimate("claude-sonnet-5", 0, 0, cache_write=10_000)
+    assert abs(written - full * 1.25) < 1e-9
 
 
 def test_unknown_model_returns_none():

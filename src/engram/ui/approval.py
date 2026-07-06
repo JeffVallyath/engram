@@ -212,8 +212,12 @@ class ApprovalDialog:
 
         self.sent = True
         lines = [f"✓ {status}" if status.startswith("added") else f"✗ {status}" for _c, status in results]
-        self.status.configure(text="\n".join(lines), fg=OK)
+        skipped = [s for _c, s in results if not s.startswith("added")]
+        self.status.configure(text="\n".join(lines), fg=WARN if skipped else OK)
         self.send_btn.configure(state="disabled")
+        if skipped:
+            # a 2.5s flash is how skips get missed — stay open until dismissed
+            return
         self.top.after(2500, self._close)
 
     def _close(self):

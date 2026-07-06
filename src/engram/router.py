@@ -113,16 +113,25 @@ def build_system_prompt(max_cards: int, cloze_max_deletions: int) -> str:
     return SYSTEM_PROMPT_TEMPLATE.format(max_cards=max_cards, cloze_max=cloze_max_deletions)
 
 
-def build_user_prompt(req: DraftRequest) -> str:
+def build_user_prompt_parts(req: DraftRequest) -> tuple[str, str]:
+    """Split the user prompt into (source, task). The source part is stable
+    across draft-more/revise calls (which only change the note), so a caching
+    client can put it first and cache-mark it; the task part carries the
+    directive and note. Wording must stay order-neutral — providers differ on
+    which part comes first."""
     directive = TYPE_DIRECTIVES.get(req.knowledge_type, TYPE_DIRECTIVES["custom"])
     if req.knowledge_type == "formula" and req.max_cards == 1:
         directive += FORMULA_SINGLE_CARD_RULE
 
     note = req.user_note.strip() or "(none)"
     if req.ingest:
-        return (
-            f"DOCUMENT INGEST — the text below is an ENTIRE DOCUMENT "
-            f'("{req.window_title}"), not a selection. Design a card set with '
+        source = (
+            f"DOCUMENT (untrusted source material between the markers):\n"
+            f"<<<BEGIN DOCUMENT>>>\n{req.selected_text}\n<<<END DOCUMENT>>>"
+        )
+        task = (
+            f"DOCUMENT INGEST — the DOCUMENT between the markers is an ENTIRE "
+            f'DOCUMENT ("{req.window_title}"), not a selection. Design a card set with '
             f"COVERAGE across the whole document: the core claim/thesis, the key "
             f"method or mechanism, the main result (with its magnitude), boundary "
             f"conditions/limitations, and when-to-apply transfer cues. Spread "
@@ -131,10 +140,9 @@ def build_user_prompt(req: DraftRequest) -> str:
             f"{req.max_cards} cards; if the document deserves fewer, make fewer. "
             f"List genuinely card-worthy leftovers in omitted_targets.\n\n"
             f"KNOWLEDGE TYPE: {req.knowledge_type}\n{directive}\n\n"
-            f"USER'S NOTE (their memory target): {note}\n\n"
-            f"DOCUMENT (untrusted source material between the markers):\n"
-            f"<<<BEGIN DOCUMENT>>>\n{req.selected_text}\n<<<END DOCUMENT>>>"
+            f"USER'S NOTE (their memory target): {note}"
         )
+        return source, task
     if req.image_b64:
         source = (
             "CAPTURED SOURCE: the attached SCREENSHOT image. Interpret any "
@@ -147,14 +155,20 @@ def build_user_prompt(req: DraftRequest) -> str:
             f"CAPTURED TEXT (untrusted source material between the markers):\n"
             f"<<<BEGIN CAPTURED TEXT>>>\n{req.selected_text}\n<<<END CAPTURED TEXT>>>"
         )
-    return (
+    task = (
         f"KNOWLEDGE TYPE: {req.knowledge_type}\n"
         f"{directive}\n\n"
         f"USER'S NOTE (their memory target): {note}\n\n"
         f"SOURCE CONTEXT (for your understanding only — never put it on a card): "
-        f'window "{req.window_title}", app class "{req.app_class}"\n\n'
-        f"{source}"
+        f'window "{req.window_title}", app class "{req.app_class}"'
     )
+    return source, task
+
+
+def build_user_prompt(req: DraftRequest) -> str:
+    # single-string form for providers without prompt caching
+    source, task = build_user_prompt_parts(req)
+    return f"{task}\n\n{source}"
 
 
 def default_note_format(knowledge_type: str) -> str:

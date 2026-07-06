@@ -98,7 +98,11 @@ def draft_outcome(client, req: DraftRequest, cfg: Config) -> ValidationOutcome:
             accepted=template_drafts(req),
             warnings=["manual mode — fill in the template before adding"],
         )
-    return validate_drafts(client.draft_cards(req), cfg.cards, req.max_cards)
+    outcome = validate_drafts(client.draft_cards(req), cfg.cards, req.max_cards)
+    log.info("draft outcome: accepted=%d dropped=%d omitted=%d warnings=%d rejected=%s",
+             len(outcome.accepted), len(outcome.dropped), len(outcome.omitted),
+             len(outcome.warnings), "yes" if outcome.reject_reason else "no")
+    return outcome
 
 
 class App:

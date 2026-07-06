@@ -91,7 +91,9 @@ def test_check_setup_reports_missing_model_and_field():
 
 
 @responses.activate
-def test_add_cards_payload_and_duplicate_reporting():
+def test_add_cards_payload_and_duplicate_reporting(caplog):
+    import logging
+
     seen = {}
 
     def can_add(payload):
@@ -111,7 +113,11 @@ def test_add_cards_payload_and_duplicate_reporting():
 
     cards = [card(), card(front="Duplicate front?", back="dup")]
     client = AnkiClient(URL)
-    results = client.add_cards(cards, CFG, app_class="browser", window_title="w")
+    with caplog.at_level(logging.INFO, logger="engram.anki"):
+        results = client.add_cards(cards, CFG, app_class="browser", window_title="w")
+
+    # the push totals are logged, so "why did only N land?" is answerable later
+    assert "anki push: deck=engram sent=2 added=1 skipped=1" in caplog.text
 
     # basic card mapped to configured model/fields
     note = seen["addNotes"][0]

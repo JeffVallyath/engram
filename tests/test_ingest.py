@@ -106,3 +106,24 @@ def test_non_ingest_prompt_unchanged():
         window_title="w", app_class="browser", max_cards=2,
     )
     assert "ENTIRE DOCUMENT" not in build_user_prompt(req)
+
+
+def test_prompt_parts_keep_note_out_of_source():
+    # the source part must be identical across draft-more/revise (which only
+    # change the note) or the anthropic cache prefix never hits
+    from engram.router import build_user_prompt_parts
+
+    def make(note):
+        return DraftRequest(
+            knowledge_type="auto", selected_text="Abstract... Results...",
+            user_note=note, window_title="paper.pdf", app_class="file",
+            max_cards=12, ingest=True,
+        )
+
+    src1, task1 = build_user_prompt_parts(make(""))
+    src2, task2 = build_user_prompt_parts(make("Draft cards for these omitted targets: X; Y"))
+    assert src1 == src2
+    assert "omitted targets: X; Y" in task2 and "omitted targets: X; Y" not in src2
+    assert "Abstract... Results..." in src1 and "Abstract... Results..." not in task1
+    # single-string form is the two parts joined
+    assert build_user_prompt(make("")) == f"{task1}\n\n{src1}"

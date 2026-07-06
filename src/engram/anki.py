@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import datetime
+import logging
 import re
 
 import requests
 
 from .config import Config
 from .models import CardDraft
+
+log = logging.getLogger(__name__)
 
 SUPPORTED_PROTOCOL = 6
 ADDON_CODE = "2055492159"
@@ -182,4 +185,7 @@ class AnkiClient:
 
         order = {id(c): i for i, c in enumerate(cards)}
         results.sort(key=lambda pair: order[id(pair[0])])
+        added = sum(1 for _c, s in results if s.startswith("added"))
+        log.info("anki push: deck=%s sent=%d added=%d skipped=%d",
+                 deck, len(cards), added, len(cards) - added)
         return results

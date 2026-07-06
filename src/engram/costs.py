@@ -32,24 +32,30 @@ def _rate(model: str):
     return None
 
 
-def estimate(model: str, in_tok: int, out_tok: int, cache_read: int = 0):
+def estimate(model: str, in_tok: int, out_tok: int, cache_read: int = 0, cache_write: int = 0):
+    # in_tok is UNCACHED input only — the api reports uncached, cache-write
+    # and cache-read tokens as separate counts. writes bill at 1.25x the
+    # input rate, reads at 0.1x.
     rate = _rate(model)
     if rate is None:
         return None
-    fresh_in = max(in_tok - cache_read, 0)
-    return (fresh_in / 1e6 * rate[0]) + (cache_read / 1e6 * rate[0] * 0.1) + (out_tok / 1e6 * rate[1])
+    return ((in_tok / 1e6 * rate[0]) + (cache_write / 1e6 * rate[0] * 1.25)
+            + (cache_read / 1e6 * rate[0] * 0.1) + (out_tok / 1e6 * rate[1]))
 
 
-def record(model, attempts, in_tok, out_tok, cache_read=0, has_image=False, cards=None):
+def record(model, attempts, in_tok, out_tok, cache_read=0, cache_write=0,
+           has_image=False, cards=None):
     global _session_total
-    cost = estimate(model, in_tok, out_tok, cache_read)
+    cost = estimate(model, in_tok, out_tok, cache_read, cache_write)
     if cost is None:
         cost_s = "no price for this model"
     else:
         _session_total += cost
         cost_s = f"~${cost:.4f} (session ~${_session_total:.4f})"
     log.info(
-        "draft cost: model=%s attempts=%d in=%d out=%d cache_read=%d image=%s cards<=%s est=%s",
-        model, attempts, in_tok, out_tok, cache_read, "yes" if has_image else "no", cards, cost_s,
+        "draft cost: model=%s attempts=%d in=%d out=%d cache_read=%d cache_write=%d "
+        "image=%s cards<=%s est=%s",
+        model, attempts, in_tok, out_tok, cache_read, cache_write,
+        "yes" if has_image else "no", cards, cost_s,
     )
     return cost
