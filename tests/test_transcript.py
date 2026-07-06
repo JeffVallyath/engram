@@ -79,9 +79,24 @@ def test_fetch_transcript_happy_path(monkeypatch):
     assert "[0:12] interleaving beats blocking" in r.text
 
 
-def test_fetch_transcript_bad_url_raises():
-    with pytest.raises(IngestError, match="not a recognizable YouTube link"):
-        fetch_transcript("https://example.com/video")
+def test_fetch_transcript_non_url_raises():
+    with pytest.raises(IngestError, match="not a video link"):
+        fetch_transcript("C:/papers/attention.pdf")
+
+
+def test_fetch_transcript_routes_non_youtube_urls_to_ytdlp(monkeypatch):
+    seen = {}
+
+    def fake_ytdlp(url, ingest_cfg=None):
+        seen["url"] = url
+        return [("welcome to the lecture", 4.0)], "Week 3 — Panopto"
+
+    monkeypatch.setattr(transcript, "_ytdlp_captions", fake_ytdlp)
+    r = fetch_transcript("https://uni.hosted.panopto.com/Panopto/Pages/Viewer.aspx?id=abc")
+    assert seen["url"].startswith("https://uni.hosted.panopto.com")
+    assert r.title == "Week 3 — Panopto"
+    assert "[0:04] welcome to the lecture" in r.text
+    assert r.video_id == ""
 
 
 def test_fetch_transcript_empty_raises(monkeypatch):
@@ -105,9 +120,12 @@ def test_load_source_routes_video_url(monkeypatch):
     assert "hello" in text
 
 
-def test_load_source_rejects_non_youtube_url():
-    with pytest.raises(IngestError, match="only YouTube links"):
-        load_source("https://example.com/article")
+def test_load_source_routes_any_url_to_transcript(monkeypatch):
+    monkeypatch.setattr(transcript, "_ytdlp_captions",
+                        lambda url, ingest_cfg=None: ([("hi", 0.0)], "A Lecture"))
+    text, name = load_source("https://vimeo.com/123456789")
+    assert name == "A Lecture"
+    assert "hi" in text
 
 
 def test_load_source_routes_file_path(tmp_path):
@@ -116,3 +134,79 @@ def test_load_source_routes_file_path(tmp_path):
     text, name = load_source(str(f))
     assert name == "notes.md"
     assert "spacing beats cramming" in text
+
+
+VTT_SAMPLE = """WEBVTT
+Kind: captions
+
+00:00:01.000 --> 00:00:04.000
+<c>welcome to</c> the course
+
+00:00:04.000 --> 00:00:07.500
+welcome to the course
+today we cover graphs
+
+1:00:02.250 --> 1:00:05.000
+closing &amp; questions
+"""
+
+
+def test_parse_caption_file_vtt_with_rolling_dedupe():
+    snippets = transcript.parse_caption_file(VTT_SAMPLE)
+    texts = [t for t, _ in snippets]
+    assert texts == ["welcome to the course", "today we cover graphs", "closing & questions"]
+    assert snippets[0][1] == 1.0
+    assert snippets[2][1] == 3602.25  # hour timestamps parse
+
+
+def test_parse_caption_file_srt_commas():
+    srt = "1\n00:00:02,500 --> 00:00:05,000\nhello there\n\n2\n00:00:05,000 --> 00:00:08,000\ngeneral kenobi\n"
+    snippets = transcript.parse_caption_file(srt)
+    assert snippets == [("hello there", 2.5), ("general kenobi", 5.0)]
+
+
+def test_pick_caption_track_prefers_manual_english_vtt():
+    info = {
+        "subtitles": {
+            "de": [{"ext": "vtt", "url": "http://x/de.vtt"}],
+            "en": [{"ext": "json3", "url": "http://x/en.json3"},
+                   {"ext": "vtt", "url": "http://x/en.vtt"}],
+        },
+        "automatic_captions": {"en": [{"ext": "vtt", "url": "http://x/auto.vtt"}]},
+    }
+    assert transcript._pick_caption_track(info) == "http://x/en.vtt"
+
+
+def test_pick_caption_track_falls_back_to_auto_then_none():
+    auto_only = {"automatic_captions": {"en": [{"ext": "vtt", "url": "http://x/auto.vtt"}]}}
+    assert transcript._pick_caption_track(auto_only) == "http://x/auto.vtt"
+    assert transcript._pick_caption_track({}) is None
+    yt_internal_only = {"subtitles": {"en": [{"ext": "json3", "url": "http://x/en.json3"}]}}
+    assert transcript._pick_caption_track(yt_internal_only) is None
+
+
+def test_hls_caption_playlist_is_stitched():
+    manifest = "#EXTM3U\n#EXT-X-VERSION:4\n#EXTINF:30.0,\nen.vtt?segment=0\n#EXTINF:30.0,\nen.vtt?segment=1\n"
+
+    class FakeYdl:
+        def __init__(self):
+            self.fetched = []
+
+        def urlopen(self, u):
+            self.fetched.append(u)
+            seg = u[-1]
+            body = f"WEBVTT\n\n00:00:0{seg}.000 --> 00:00:05.000\nsegment {seg} text\n"
+
+            class R:
+                def read(self_inner):
+                    return body.encode()
+            return R()
+
+    ydl = FakeYdl()
+    data = transcript._fetch_hls_segments(manifest, "https://hls.example.com/subs/en.m3u8", ydl)
+    assert ydl.fetched == [
+        "https://hls.example.com/subs/en.vtt?segment=0",
+        "https://hls.example.com/subs/en.vtt?segment=1",
+    ]
+    snippets = transcript.parse_caption_file(data)
+    assert [t for t, _ in snippets] == ["segment 0 text", "segment 1 text"]

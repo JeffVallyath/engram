@@ -300,7 +300,8 @@ class App:
         if not self.can_ingest():
             return
         url = simpledialog.askstring(
-            "engram — ingest a video", "YouTube link:", parent=self.root)
+            "engram — ingest a video", "Video link (YouTube/Panopto/Kaltura/…):",
+            parent=self.root)
         if not url or not url.strip():
             return
         url = url.strip()
@@ -308,7 +309,7 @@ class App:
 
         def worker():
             try:
-                tr = fetch_transcript(url)
+                tr = fetch_transcript(url, self.cfg.ingest)
             except IngestError as e:
                 self.q.put(IngestFailed(str(e)))
                 return
@@ -513,18 +514,17 @@ def cli_anki_check(cfg: Config) -> int:
 def cli_ingest(cfg: Config, args) -> int:
     from dataclasses import replace as dc_replace
 
-    from .ingest import BUDGET_LIMIT, DEFAULT_BUDGET, IngestError, load_source
-    from .transcript import is_video_url
+    from .ingest import BUDGET_LIMIT, DEFAULT_BUDGET, IngestError, is_url, load_source
 
     client = make_client(cfg)
     if client is None:
         print("ingest needs an llm provider — set llm.provider to anthropic/openai "
               "(or fake to try the flow) in ~/.engram/config.toml", file=sys.stderr)
         return 2
-    if is_video_url(args.ingest):
+    if is_url(args.ingest):
         print("fetching transcript...")
     try:
-        text, name = load_source(args.ingest)
+        text, name = load_source(args.ingest, cfg)
     except IngestError as e:
         print(f"ingest error: {e}", file=sys.stderr)
         return 1
@@ -535,7 +535,7 @@ def cli_ingest(cfg: Config, args) -> int:
         selected_text=text,
         user_note=args.note or "",
         window_title=name,
-        app_class="video" if is_video_url(args.ingest) else "file",
+        app_class="video" if is_url(args.ingest) else "file",
         max_cards=budget,
         ingest=True,
     )
@@ -656,7 +656,8 @@ def main(argv=None) -> int:
     parser.add_argument("--cards", type=int, help="max cards for --draft (default from config)")
     parser.add_argument("--provider", help="override llm.provider for this run (e.g. fake, manual)")
     parser.add_argument("--ingest", metavar="FILE_OR_URL",
-                        help="draft a coverage card set from a pdf/txt/md file or a YouTube link")
+                        help="draft a coverage card set from a pdf/txt/md file or a video link "
+                             "(YouTube, or any yt-dlp-supported page with captions)")
     parser.add_argument("--print", action="store_true", help="with --ingest/--draft: console output, no review dialog")
     parser.add_argument("--anki-check", action="store_true", help="check AnkiConnect, deck, models and fields")
     parser.add_argument("--capture-test", action="store_true", help="print captures to the console")

@@ -57,3 +57,15 @@ attach_image = "first"
 front_max_chars = 200
 back_max_chars = 500
 cloze_max_deletions = 2
+
+[ingest]
+# Video-link ingest reads the caption track (YouTube directly; everything else
+# — Canvas/Panopto/Kaltura/Echo360/Vimeo/... — via yt-dlp). For login-gated
+# platforms, give yt-dlp your session:
+#   cookies_from_browser: borrow live cookies from "chrome" | "firefox" | "edge".
+#     NOTE: recent Chrome versions encrypt cookies against outside readers on
+#     Windows; if chrome fails, use firefox or a cookies.txt export.
+#   cookies_file: path to a Netscape-format cookies.txt (e.g. from the
+#     "Get cookies.txt LOCALLY" browser extension).
+cookies_from_browser = ""
+cookies_file = ""

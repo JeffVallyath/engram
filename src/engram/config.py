@@ -50,6 +50,13 @@ attach_image = "first"
 front_max_chars = 200
 back_max_chars = 500
 cloze_max_deletions = 2
+
+[ingest]
+# For login-gated video platforms (Canvas/Panopto/Kaltura/Echo360): borrow a
+# browser's logged-in cookies ("chrome" | "firefox" | "edge"), or point
+# cookies_file at a Netscape-format cookies.txt export. Empty = anonymous.
+cookies_from_browser = ""
+cookies_file = ""
 """
 
 
@@ -103,6 +110,14 @@ class CardsConfig:
 
 
 @dataclass(frozen=True)
+class IngestConfig:
+    # auth for gated video platforms: a browser to borrow live cookies from
+    # ("chrome" | "firefox" | "edge"), and/or a Netscape cookies.txt path
+    cookies_from_browser: str = ""
+    cookies_file: str = ""
+
+
+@dataclass(frozen=True)
 class Config:
     llm: LLMConfig = field(default_factory=LLMConfig)
     hotkey: HotkeyConfig = field(default_factory=HotkeyConfig)
@@ -110,6 +125,7 @@ class Config:
     capture: CaptureConfig = field(default_factory=CaptureConfig)
     cards: CardsConfig = field(default_factory=CardsConfig)
     snap: SnapConfig = field(default_factory=SnapConfig)
+    ingest: IngestConfig = field(default_factory=IngestConfig)
 
 
 def ensure_config_file(path: Path = CONFIG_PATH) -> Path:
@@ -161,6 +177,7 @@ def load_config(path: Path = CONFIG_PATH) -> Config:
         capture=_section(raw, "capture", CaptureConfig),
         cards=_section(raw, "cards", CardsConfig),
         snap=SnapConfig(attach_image=_attach_mode(raw.get("snap", {}).get("attach_image", "first"), path)),
+        ingest=_section(raw, "ingest", IngestConfig),
     )
 
 

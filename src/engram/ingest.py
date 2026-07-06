@@ -23,21 +23,22 @@ class IngestError(Exception):
     pass
 
 
-def load_source(source: str) -> tuple[str, str]:
-    """Route an ingest source (file path or YouTube link) to its extractor.
+def is_url(source: str) -> bool:
+    return source.lower().startswith(("http://", "https://"))
 
-    Returns (text, display_name) — the name a human would recognize the
-    source by: filename for files, video title for videos."""
-    from .transcript import fetch_transcript, is_video_url
 
-    if is_video_url(source):
-        tr = fetch_transcript(source)
+def load_source(source: str, cfg=None) -> tuple[str, str]:
+    """Route an ingest source (file path or video link) to its extractor.
+
+    Any URL is treated as a video page: YouTube via the transcript API,
+    everything else via yt-dlp captions. Returns (text, display_name) — the
+    name a human would recognize the source by: filename for files, video
+    title for videos. cfg is the full Config (for ingest auth), optional."""
+    from .transcript import fetch_transcript
+
+    if is_url(source):
+        tr = fetch_transcript(source, cfg.ingest if cfg is not None else None)
         return tr.text, tr.title
-    if source.lower().startswith(("http://", "https://")):
-        raise IngestError(
-            "only YouTube links are supported for URL ingest — for other pages, "
-            "save as html/pdf and ingest the file"
-        )
     return extract_text(source), Path(source).name
 
 
