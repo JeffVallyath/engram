@@ -60,12 +60,22 @@ cloze_max_deletions = 2
 
 [ingest]
 # Video-link ingest reads the caption track (YouTube directly; everything else
-# — Canvas/Panopto/Kaltura/Echo360/Vimeo/... — via yt-dlp). For login-gated
-# platforms, give yt-dlp your session:
-#   cookies_from_browser: borrow live cookies from "chrome" | "firefox" | "edge".
-#     NOTE: recent Chrome versions encrypt cookies against outside readers on
-#     Windows; if chrome fails, use firefox or a cookies.txt export.
-#   cookies_file: path to a Netscape-format cookies.txt (e.g. from the
-#     "Get cookies.txt LOCALLY" browser extension).
+# — Canvas/Panopto/Kaltura/Echo360/Vimeo/... — via yt-dlp). Login-gated
+# platforms need your session cookies. Three ways, tried in this priority order
+# (first that has a cookie for the URL's domain wins):
+#
+#   1. Cookie bridge (recommended, and the ONLY thing that works with modern
+#      Chrome). Load the companion extension in extension/ and click "Track
+#      this site" on your Canvas/Panopto page. It pushes those sites' cookies
+#      to the loopback port below; engram uses them automatically. Chrome
+#      app-bound-encrypts + locks its cookie DB, so nothing external (yt-dlp,
+#      cookies_from_browser="chrome") can read it — an in-browser extension is
+#      the only path.
+cookie_bridge_port = 8766          # loopback receiver for the extension; 0 = off
+#
+#   2. cookies_from_browser: yt-dlp reads the browser directly. Works for
+#      "firefox" / "edge"; "chrome" fails on Windows (see above).
 cookies_from_browser = ""
+#
+#   3. cookies_file: a Netscape-format cookies.txt path.
 cookies_file = ""

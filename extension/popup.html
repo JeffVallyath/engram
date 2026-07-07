@@ -1,0 +1,29 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<style>
+  body { font: 13px "Segoe UI", sans-serif; width: 300px; margin: 0; padding: 12px;
+         background: #1e1e24; color: #e6e6e6; }
+  h1 { font-size: 14px; margin: 0 0 8px; }
+  button { font: 12px "Segoe UI"; background: #4f8cc9; color: #fff; border: 0;
+           border-radius: 4px; padding: 6px 10px; cursor: pointer; margin: 2px 0; }
+  button.sec { background: #33333d; }
+  #domains { list-style: none; margin: 8px 0; padding: 0; }
+  #domains li { display: flex; justify-content: space-between; align-items: center;
+                padding: 3px 0; border-bottom: 1px solid #2c2c34; }
+  #domains .rm { background: none; color: #c98; padding: 0 4px; }
+  .dim { color: #8a8a90; font-size: 11px; }
+  #status { margin-top: 8px; min-height: 16px; }
+</style>
+</head>
+<body>
+  <h1>engram cookie bridge</h1>
+  <div class="dim">Cookies for these sites are sent to engram on 127.0.0.1 so it can ingest their gated videos.</div>
+  <button id="track">Track this site</button>
+  <ul id="domains"></ul>
+  <button id="sync" class="sec">Sync now</button>
+  <div id="status" class="dim"></div>
+  <script src="popup.js"></script>
+</body>
+</html>

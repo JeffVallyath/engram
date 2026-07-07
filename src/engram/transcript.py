@@ -195,8 +195,28 @@ def _fetch_hls_segments(manifest: str, manifest_url: str, ydl) -> str:
     return "\n\n".join(parts)
 
 
+def _bridge_cookie_file(url: str) -> str | None:
+    """If the companion extension has pushed cookies covering this URL's host,
+    write them to a temp Netscape file and return its path (caller deletes)."""
+    import tempfile
+    from urllib.parse import urlparse
+
+    from . import cookie_bridge
+
+    host = urlparse(url).hostname or ""
+    matching = cookie_bridge.cookies_for_host(cookie_bridge.load_cookies(), host)
+    if not matching:
+        return None
+    fd, path = tempfile.mkstemp(prefix="engram_ck_", suffix=".txt")
+    with __import__("os").fdopen(fd, "w", encoding="utf-8") as fh:
+        cookie_bridge.write_netscape(matching, fh)
+    return path
+
+
 def _ytdlp_captions(url: str, ingest_cfg=None) -> tuple[list[tuple[str, float]], str]:
     """(snippets, title) for a non-YouTube video page, via yt-dlp."""
+    import os
+
     try:
         import yt_dlp
     except ImportError as e:
@@ -206,10 +226,15 @@ def _ytdlp_captions(url: str, ingest_cfg=None) -> tuple[list[tuple[str, float]],
         ) from e
 
     opts = {"quiet": True, "no_warnings": True, "skip_download": True}
-    if ingest_cfg is not None and ingest_cfg.cookies_from_browser:
-        opts["cookiesfrombrowser"] = (ingest_cfg.cookies_from_browser,)
-    if ingest_cfg is not None and ingest_cfg.cookies_file:
+    # priority: bridge cookies (the only thing that works with modern Chrome)
+    # > explicit cookies_file > cookies_from_browser
+    bridge_file = _bridge_cookie_file(url)
+    if bridge_file:
+        opts["cookiefile"] = bridge_file
+    elif ingest_cfg is not None and ingest_cfg.cookies_file:
         opts["cookiefile"] = ingest_cfg.cookies_file
+    elif ingest_cfg is not None and ingest_cfg.cookies_from_browser:
+        opts["cookiesfrombrowser"] = (ingest_cfg.cookies_from_browser,)
 
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:
@@ -237,9 +262,17 @@ def _ytdlp_captions(url: str, ingest_cfg=None) -> tuple[list[tuple[str, float]],
     except yt_dlp.utils.DownloadError as e:
         msg = str(e).replace("ERROR: ", "").strip()
         if "logged in" in msg.lower() or "login" in msg.lower() or "401" in msg or "403" in msg:
-            msg += (" — if this platform needs a login, set ingest.cookies_from_browser "
-                    '(e.g. "firefox") in ~/.engram/config.toml')
+            hint = (" — this platform needs a login. Track its domain in the engram "
+                    "cookie-bridge extension") if not bridge_file else \
+                   " — the tracked cookies may have expired; re-open the site in Chrome"
+            msg += hint
         raise IngestError(f"could not read that video page: {msg}") from e
+    finally:
+        if bridge_file:
+            try:
+                os.remove(bridge_file)
+            except OSError:
+                pass
     return parse_caption_file(data), title
 
 

@@ -52,11 +52,18 @@ back_max_chars = 500
 cloze_max_deletions = 2
 
 [ingest]
-# For login-gated video platforms (Canvas/Panopto/Kaltura/Echo360): borrow a
-# browser's logged-in cookies ("chrome" | "firefox" | "edge"), or point
-# cookies_file at a Netscape-format cookies.txt export. Empty = anonymous.
+# For login-gated video platforms (Canvas/Panopto/Kaltura/Echo360). Three ways,
+# in priority order — first one that has a cookie for the URL's domain wins:
+#   1. cookie bridge (below) — the companion Chrome extension pushes cookies
+#      here automatically. Only way that works with modern Chrome (app-bound
+#      encryption locks the cookie DB against every external tool).
+#   2. cookies_from_browser — yt-dlp reads the browser directly. Works for
+#      "firefox"/"edge"; "chrome" fails on Windows (app-bound encryption).
+#   3. cookies_file — a Netscape cookies.txt path.
 cookies_from_browser = ""
 cookies_file = ""
+# loopback receiver the companion extension pushes to; 0 disables it.
+cookie_bridge_port = 8766
 """
 
 
@@ -115,6 +122,7 @@ class IngestConfig:
     # ("chrome" | "firefox" | "edge"), and/or a Netscape cookies.txt path
     cookies_from_browser: str = ""
     cookies_file: str = ""
+    cookie_bridge_port: int = 8766  # loopback receiver for the extension; 0 = off
 
 
 @dataclass(frozen=True)

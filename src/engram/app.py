@@ -454,6 +454,9 @@ class App:
 
         hotkey.register(self.cfg.hotkey.combo, self.on_hotkey)
         hotkey.register(self.cfg.hotkey.snap_combo, self.on_snap_hotkey)
+        if self.cfg.ingest.cookie_bridge_port:
+            from .cookie_bridge import start_cookie_server
+            start_cookie_server(self.cfg.ingest.cookie_bridge_port)
         self.make_tray()
         if self.llm_error:
             log.warning("llm drafting disabled: %s", self.llm_error)
