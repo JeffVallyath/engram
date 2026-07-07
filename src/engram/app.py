@@ -28,6 +28,7 @@ from .models import (
     DraftRequest,
     IngestFailed,
     IngestLinkEvent,
+    IngestPasteEvent,
     IngestPickEvent,
     IngestReady,
     QuitEvent,
@@ -175,6 +176,8 @@ class App:
                     self.pick_ingest_file()
                 elif isinstance(ev, IngestLinkEvent):
                     self.ask_ingest_link()
+                elif isinstance(ev, IngestPasteEvent):
+                    self.paste_ingest()
                 elif isinstance(ev, IngestReady):
                     self.ingest_picker(ev.text, ev.filename, ev.app_class)
                 elif isinstance(ev, IngestFailed):
@@ -317,6 +320,46 @@ class App:
 
         threading.Thread(target=worker, daemon=True).start()
 
+    def paste_ingest(self):
+        # transcript-you-can-see path: for any gated video (YuJa/Canvas Studio/
+        # etc.) whose player shows a transcript, paste it and draft as usual —
+        # no cookies, no per-platform scraping
+        from .ui.theme import ACCENT, BG, DIM, FG
+
+        if not self.can_ingest():
+            return
+        self.busy = True
+        win = tk.Toplevel(self.root)
+        win.title("engram — ingest pasted text")
+        win.attributes("-topmost", True)
+        win.configure(bg=BG, padx=12, pady=10)
+        tk.Label(win, text="Paste a transcript or notes, then Ingest:", bg=BG, fg=FG,
+                 font=("Segoe UI", 11, "bold")).pack(anchor="w")
+        tk.Label(win, text="Works for any video whose player shows a transcript (open it, Ctrl+A, Ctrl+C).",
+                 bg=BG, fg=DIM, font=("Segoe UI", 9)).pack(anchor="w", pady=(0, 6))
+        txt = tk.Text(win, width=90, height=22, bg="#26262e", fg=FG, insertbackground=FG,
+                      font=("Segoe UI", 10), relief="flat", wrap="word")
+        txt.pack(fill="both", expand=True)
+        txt.focus_set()
+
+        def go():
+            content = txt.get("1.0", "end-1c").strip()
+            win.destroy()
+            self.busy = False  # release so ingest_picker can take over
+            if content:
+                self.ingest_picker(content, "pasted transcript", "paste")
+
+        def cancel():
+            win.destroy()
+            self.busy = False
+
+        row = tk.Frame(win, bg=BG)
+        row.pack(anchor="e", pady=(8, 0))
+        tk.Button(row, text="Ingest", command=go).pack(side="left", padx=4)
+        tk.Button(row, text="Cancel (Esc)", command=cancel).pack(side="left", padx=4)
+        win.bind("<Escape>", lambda _e: cancel())
+        win.protocol("WM_DELETE_WINDOW", cancel)
+
     def ingest_picker(self, text: str, filename: str, app_class="file",
                       initial_note="", initial_cards=None):
         from .ingest import BUDGET_LIMIT, DEFAULT_BUDGET
@@ -422,9 +465,13 @@ class App:
         def ingest_link(_icon, _item):
             self.q.put(IngestLinkEvent())
 
+        def ingest_paste(_icon, _item):
+            self.q.put(IngestPasteEvent())
+
         menu = pystray.Menu(
             pystray.MenuItem("Ingest a file…", ingest_file),
             pystray.MenuItem("Ingest a video link…", ingest_link),
+            pystray.MenuItem("Ingest pasted text…", ingest_paste),
             pystray.MenuItem("Open config folder", open_config),
             pystray.MenuItem("Quit engram", quit_app),
         )
@@ -524,13 +571,21 @@ def cli_ingest(cfg: Config, args) -> int:
         print("ingest needs an llm provider — set llm.provider to anthropic/openai "
               "(or fake to try the flow) in ~/.engram/config.toml", file=sys.stderr)
         return 2
-    if is_url(args.ingest):
-        print("fetching transcript...")
-    try:
-        text, name = load_source(args.ingest, cfg)
-    except IngestError as e:
-        print(f"ingest error: {e}", file=sys.stderr)
-        return 1
+    if args.ingest_text:
+        # lstrip the BOM some pipes prepend; the tray paste box never has one
+        text, name, app_class = sys.stdin.read().lstrip("﻿").strip(), "pasted transcript", "paste"
+        if not text:
+            print("ingest error: no text on stdin", file=sys.stderr)
+            return 1
+    else:
+        if is_url(args.ingest):
+            print("fetching transcript...")
+        try:
+            text, name = load_source(args.ingest, cfg)
+        except IngestError as e:
+            print(f"ingest error: {e}", file=sys.stderr)
+            return 1
+        app_class = "video" if is_url(args.ingest) else "file"
 
     budget = min(args.cards or DEFAULT_BUDGET, BUDGET_LIMIT)
     req = DraftRequest(
@@ -538,7 +593,7 @@ def cli_ingest(cfg: Config, args) -> int:
         selected_text=text,
         user_note=args.note or "",
         window_title=name,
-        app_class="video" if is_url(args.ingest) else "file",
+        app_class=app_class,
         max_cards=budget,
         ingest=True,
     )
@@ -661,6 +716,9 @@ def main(argv=None) -> int:
     parser.add_argument("--ingest", metavar="FILE_OR_URL",
                         help="draft a coverage card set from a pdf/txt/md file or a video link "
                              "(YouTube, or any yt-dlp-supported page with captions)")
+    parser.add_argument("--ingest-text", action="store_true",
+                        help="draft a coverage card set from text piped on stdin "
+                             "(e.g. a transcript you copied from a video player)")
     parser.add_argument("--print", action="store_true", help="with --ingest/--draft: console output, no review dialog")
     parser.add_argument("--anki-check", action="store_true", help="check AnkiConnect, deck, models and fields")
     parser.add_argument("--capture-test", action="store_true", help="print captures to the console")
@@ -695,7 +753,7 @@ def main(argv=None) -> int:
 
     if args.draft:
         return cli_draft(cfg, args)
-    if args.ingest:
+    if args.ingest or args.ingest_text:
         return cli_ingest(cfg, args)
     if args.anki_check:
         return cli_anki_check(cfg)

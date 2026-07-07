@@ -103,6 +103,11 @@ class IngestLinkEvent:
 
 
 @dataclass
+class IngestPasteEvent:
+    pass
+
+
+@dataclass
 class IngestReady:
     text: str
     filename: str
