@@ -442,6 +442,12 @@ def _yuja_captions(url: str) -> tuple[list[tuple[str, float]], str]:
 
 
 def fetch_transcript(url: str, ingest_cfg=None) -> TranscriptResult:
+    url = url.strip()
+    # tolerate a pasted link with no scheme (media.ucsc.edu/... -> https://...)
+    if not url.lower().startswith(("http://", "https://")) and re.match(
+            r"(www\.|[\w-]+\.)+[a-z]{2,}(?:[/:?]|$)", url, re.I):
+        url = "https://" + url
+
     video_id = extract_video_id(url)
     if video_id is not None:
         snippets, title = _fetch_snippets(video_id), None
