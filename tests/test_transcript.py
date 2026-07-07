@@ -259,6 +259,26 @@ def test_find_caption_link_none_when_absent():
     assert transcript._find_caption_link({"title": "x", "duration": 10}) is None
 
 
+def test_yuja_title_prefers_nested_video_object():
+    data = {"success": True, "video": {"title": "CC - Lecture Fodor 1", "broadcastPID": 1},
+            "title": "wrong-top-level"}
+    assert transcript._yuja_title(data, "2073423") == "CC - Lecture Fodor 1"
+    assert transcript._yuja_title({"nope": 1}, "9") == "YuJa video 9"
+
+
+def test_yuja_external_player_url_gives_clear_error(monkeypatch):
+    from engram import cookie_bridge
+    monkeypatch.setattr(cookie_bridge, "load_cookies",
+                        lambda store=None: [{"domain": "media.ucsc.edu", "name": "s",
+                                             "value": "t", "path": "/", "secure": True,
+                                             "hostOnly": True, "expires": 0}])
+    # page fetch returns a shell with no canonical v=/a= link (the ?u= case)
+    monkeypatch.setattr(transcript, "_yuja_fetch_text",
+                        lambda url, cookies: "<html><body>external player shell</body></html>")
+    with pytest.raises(IngestError, match="External Player"):
+        fetch_transcript(EXTERNAL)
+
+
 def test_yuja_captions_end_to_end(monkeypatch):
     from engram import cookie_bridge
     monkeypatch.setattr(cookie_bridge, "load_cookies",

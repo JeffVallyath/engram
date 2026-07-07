@@ -346,6 +346,22 @@ def _find_caption_link(obj) -> str | None:
     return hits[0] if hits else None
 
 
+def _yuja_title(data, v: str) -> str:
+    # the human title lives on the nested video object (e.g. data.video.title);
+    # prefer that, fall back to the top level, then the id
+    srcs = []
+    if isinstance(data, dict):
+        if isinstance(data.get("video"), dict):
+            srcs.append(data["video"])
+        srcs.append(data)
+    for s in srcs:
+        for k in ("videoTitle", "title", "name", "broadcastName", "videoName"):
+            val = s.get(k)
+            if isinstance(val, str) and val.strip():
+                return val.strip()
+    return f"YuJa video {v}"
+
+
 def _yuja_fetch_json(base: str, v: str, a: str, cookies: dict) -> dict:
     import requests
 
@@ -383,15 +399,24 @@ def _yuja_captions(url: str) -> tuple[list[tuple[str, float]], str]:
     # every YuJa link renders) and read them from its embedded canonical link
     v, a = _yuja_va_from_query(url)
     if not v:
+        from urllib.parse import parse_qs, urlparse
+
         try:
             page = _yuja_fetch_text(url, cookies)
         except requests.RequestException as e:
             raise IngestError(f"could not open the YuJa page {host}: {e}") from e
         v, a = _yuja_va_from_page(page)
         if not v:
+            if parse_qs(urlparse(url).query).get("u"):
+                raise IngestError(
+                    "that's a YuJa 'External Player' link (…?u=…) — it doesn't carry "
+                    "the video's codes and they can't be recovered from it. Use the "
+                    "player's 'Copy Link' button instead (gives a …?v=…&a=… link), or "
+                    "paste the normal video-page URL."
+                )
             raise IngestError(
-                f"couldn't find a video id on that {host} page — make sure you're "
-                "logged in, or use the player's 'Copy Link' button"
+                f"couldn't find the video id on that {host} page — open the video and "
+                "use the player's 'Copy Link' button (gives a …?v=…&a=… link)"
             )
 
     try:
@@ -408,7 +433,7 @@ def _yuja_captions(url: str) -> tuple[list[tuple[str, float]], str]:
             "captions, or the response shape changed (see engram.log for its keys)"
         )
     caption_url = urljoin(base + "/", link)
-    title = (data.get("title") or data.get("name") or f"YuJa video {v}") if isinstance(data, dict) else f"YuJa video {v}"
+    title = _yuja_title(data, v)
     try:
         text = _yuja_fetch_text(caption_url, cookies)
     except requests.RequestException as e:
