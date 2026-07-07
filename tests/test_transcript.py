@@ -210,3 +210,69 @@ def test_hls_caption_playlist_is_stitched():
     ]
     snippets = transcript.parse_caption_file(data)
     assert [t for t, _ in snippets] == ["segment 0 text", "segment 1 text"]
+
+
+UCSC = "https://media.ucsc.edu/V/Video?isPlaying=false&v=2073423&a=1855346453&classPID=2361663&cim=true"
+
+
+def test_yuja_params_parsed():
+    scheme, host, v, a = transcript.yuja_params(UCSC)
+    assert (scheme, host, v, a) == ("https", "media.ucsc.edu", "2073423", "1855346453")
+
+
+@pytest.mark.parametrize("url", [
+    "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+    "https://uni.hosted.panopto.com/Panopto/Pages/Viewer.aspx?id=abc",
+    "https://media.ucsc.edu/V/Video?foo=bar",  # no v= id
+])
+def test_yuja_params_rejects_non_yuja(url):
+    assert transcript.yuja_params(url) is None
+
+
+def test_find_caption_link_walks_nested_json():
+    data = {"video": {"captionFileLink": "/P/Data/Caption/abc.vtt", "captionPID": 99},
+            "title": "Lecture 1"}
+    assert transcript._find_caption_link(data) == "/P/Data/Caption/abc.vtt"
+
+
+def test_find_caption_link_prefers_vtt_over_other():
+    data = {"transcriptDownload": "/x/t.pdf", "captionFileLink": "/x/c.srt"}
+    assert transcript._find_caption_link(data).endswith(".srt")
+
+
+def test_find_caption_link_none_when_absent():
+    assert transcript._find_caption_link({"title": "x", "duration": 10}) is None
+
+
+def test_yuja_captions_end_to_end(monkeypatch):
+    from engram import cookie_bridge
+    monkeypatch.setattr(cookie_bridge, "load_cookies",
+                        lambda store=None: [{"domain": "media.ucsc.edu", "name": "s",
+                                             "value": "tok", "path": "/", "secure": True,
+                                             "hostOnly": True, "expires": 0}])
+    seen = {}
+
+    def fake_json(base, v, a, cookies):
+        seen["base"], seen["v"], seen["a"], seen["cookies"] = base, v, a, cookies
+        return {"title": "CC - Lecture Fodor 1", "captionFileLink": "/P/Data/Caption/xol.vtt"}
+
+    def fake_text(url, cookies):
+        seen["caption_url"] = url
+        return "WEBVTT\n\n00:00:01.000 --> 00:00:04.000\nsystematicity matters\n"
+
+    monkeypatch.setattr(transcript, "_yuja_fetch_json", fake_json)
+    monkeypatch.setattr(transcript, "_yuja_fetch_text", fake_text)
+
+    r = fetch_transcript(UCSC)
+    assert seen["v"] == "2073423" and seen["a"] == "1855346453"
+    assert seen["cookies"] == {"s": "tok"}
+    assert seen["caption_url"] == "https://media.ucsc.edu/P/Data/Caption/xol.vtt"
+    assert r.title == "CC - Lecture Fodor 1"
+    assert "[0:01] systematicity matters" in r.text
+
+
+def test_yuja_captions_no_cookies_raises(monkeypatch):
+    from engram import cookie_bridge
+    monkeypatch.setattr(cookie_bridge, "load_cookies", lambda store=None: [])
+    with pytest.raises(IngestError, match="Track this site"):
+        fetch_transcript(UCSC)

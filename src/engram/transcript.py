@@ -276,10 +276,118 @@ def _ytdlp_captions(url: str, ingest_cfg=None) -> tuple[list[tuple[str, float]],
     return parse_caption_file(data), title
 
 
+# --- YuJa (Lumina) — the platform UCSC and many campuses run; yt-dlp has no
+# extractor for it. The player loads captions via a POST to /P/Data/VideoJSON
+# (params video=<v>, a=<authCode> from the ?v=&a= URL); the JSON carries a
+# caption file link, which we then download with the same session cookies. All
+# reverse-engineered from the public Video.controller.js. Needs the video
+# host's cookies from the bridge (track e.g. media.ucsc.edu in the extension).
+
+def yuja_params(url: str):
+    """(scheme, host, v, a) for a YuJa video URL, or None if it isn't one.
+    YuJa's signature is a /V/Video path with a ?v= id."""
+    from urllib.parse import parse_qs, urlparse
+
+    u = urlparse(url)
+    if "/V/Video" not in u.path:
+        return None
+    q = parse_qs(u.query)
+    v = (q.get("v") or [None])[0]
+    if not v:
+        return None
+    return u.scheme or "https", u.netloc, v, (q.get("a") or [""])[0]
+
+
+def _requests_cookies_for(host: str) -> dict:
+    from . import cookie_bridge
+
+    return {c["name"]: c["value"]
+            for c in cookie_bridge.cookies_for_host(cookie_bridge.load_cookies(), host)}
+
+
+def _find_caption_link(obj) -> str | None:
+    """Walk the VideoJSON response for a caption/transcript file URL. Defensive
+    about the exact shape (the field is captionFileLink, but nesting varies)."""
+    hits: list[str] = []
+
+    def walk(o):
+        if isinstance(o, dict):
+            for k, val in o.items():
+                if (isinstance(val, str) and val
+                        and ("caption" in k.lower() or "transcript" in k.lower())
+                        and ("/" in val or val.lower().endswith((".vtt", ".srt")))):
+                    hits.append(val)
+                walk(val)
+        elif isinstance(o, list):
+            for x in o:
+                walk(x)
+
+    walk(obj)
+    # prefer a vtt/srt link if several turned up
+    hits.sort(key=lambda s: (not s.lower().endswith((".vtt", ".srt")), len(s)))
+    return hits[0] if hits else None
+
+
+def _yuja_fetch_json(base: str, v: str, a: str, cookies: dict) -> dict:
+    import requests
+
+    r = requests.post(f"{base}/P/Data/VideoJSON", data={"video": v, "a": a},
+                      cookies=cookies, timeout=20,
+                      headers={"X-Requested-With": "XMLHttpRequest"})
+    r.raise_for_status()
+    return r.json()
+
+
+def _yuja_fetch_text(url: str, cookies: dict) -> str:
+    import requests
+
+    r = requests.get(url, cookies=cookies, timeout=20)
+    r.raise_for_status()
+    return r.text
+
+
+def _yuja_captions(url: str) -> tuple[list[tuple[str, float]], str]:
+    import logging
+    from urllib.parse import urljoin
+
+    import requests
+
+    scheme, host, v, a = yuja_params(url)
+    base = f"{scheme}://{host}"
+    cookies = _requests_cookies_for(host)
+    if not cookies:
+        raise IngestError(
+            f"no synced cookies for {host} — open the video in Chrome, click the "
+            "engram cookie-bridge extension, and 'Track this site', then retry"
+        )
+    try:
+        data = _yuja_fetch_json(base, v, a, cookies)
+    except (requests.RequestException, ValueError) as e:
+        raise IngestError(f"YuJa metadata request failed for video {v}: {e}") from e
+
+    logging.getLogger(__name__).info("yuja VideoJSON keys: %s",
+                                     list(data)[:20] if isinstance(data, dict) else type(data))
+    link = _find_caption_link(data)
+    if not link:
+        raise IngestError(
+            f"YuJa returned no caption link for video {v} — the lecture may have no "
+            "captions, or the response shape changed (see engram.log for its keys)"
+        )
+    caption_url = urljoin(base + "/", link)
+    title = (data.get("title") or data.get("name") or f"YuJa video {v}") if isinstance(data, dict) else f"YuJa video {v}"
+    try:
+        text = _yuja_fetch_text(caption_url, cookies)
+    except requests.RequestException as e:
+        raise IngestError(f"could not download YuJa caption file: {e}") from e
+    return parse_caption_file(text), title
+
+
 def fetch_transcript(url: str, ingest_cfg=None) -> TranscriptResult:
     video_id = extract_video_id(url)
     if video_id is not None:
         snippets, title = _fetch_snippets(video_id), None
+    elif yuja_params(url) is not None:
+        snippets, title = _yuja_captions(url)
     elif url.lower().startswith(("http://", "https://")):
         snippets, title = _ytdlp_captions(url, ingest_cfg)
     else:
