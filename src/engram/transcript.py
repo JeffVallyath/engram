@@ -283,19 +283,37 @@ def _ytdlp_captions(url: str, ingest_cfg=None) -> tuple[list[tuple[str, float]],
 # reverse-engineered from the public Video.controller.js. Needs the video
 # host's cookies from the bridge (track e.g. media.ucsc.edu in the extension).
 
-def yuja_params(url: str):
-    """(scheme, host, v, a) for a YuJa video URL, or None if it isn't one.
-    YuJa's signature is a /V/Video path with a ?v= id."""
-    from urllib.parse import parse_qs, urlparse
+def yuja_host(url: str):
+    """(scheme, host) if this is a YuJa video URL (any /V/Video link), else
+    None. Detection is path-only so ANY YuJa link works — the v/a codes get
+    resolved from the page if they aren't in the URL."""
+    from urllib.parse import urlparse
 
     u = urlparse(url)
     if "/V/Video" not in u.path:
         return None
-    q = parse_qs(u.query)
-    v = (q.get("v") or [None])[0]
-    if not v:
-        return None
-    return u.scheme or "https", u.netloc, v, (q.get("a") or [""])[0]
+    return u.scheme or "https", u.netloc
+
+
+def _yuja_va_from_query(url: str):
+    from urllib.parse import parse_qs, urlparse
+
+    q = parse_qs(urlparse(url).query)
+    return (q.get("v") or [None])[0], (q.get("a") or [""])[0]
+
+
+def _yuja_va_from_page(page_html: str):
+    """Pull the video id (v) and auth code (a) out of a YuJa page. The player
+    embeds the canonical link (with ?v=&a=) in canonical/og:url/twitter:url
+    meta tags even when the address-bar URL only carries a ?u= id."""
+    from urllib.parse import parse_qs, urlparse
+
+    for m in re.finditer(r'(?:href|content)="([^"]*?/V/Video\?[^"]*)"', page_html):
+        q = parse_qs(urlparse(html.unescape(m.group(1))).query)
+        v = (q.get("v") or [None])[0]
+        if v:
+            return v, (q.get("a") or [""])[0]
+    return None, ""
 
 
 def _requests_cookies_for(host: str) -> dict:
@@ -352,7 +370,7 @@ def _yuja_captions(url: str) -> tuple[list[tuple[str, float]], str]:
 
     import requests
 
-    scheme, host, v, a = yuja_params(url)
+    scheme, host = yuja_host(url)
     base = f"{scheme}://{host}"
     cookies = _requests_cookies_for(host)
     if not cookies:
@@ -360,6 +378,22 @@ def _yuja_captions(url: str) -> tuple[list[tuple[str, float]], str]:
             f"no synced cookies for {host} — open the video in Chrome, click the "
             "engram cookie-bridge extension, and 'Track this site', then retry"
         )
+
+    # v/a straight from the URL if present; otherwise fetch the page (which
+    # every YuJa link renders) and read them from its embedded canonical link
+    v, a = _yuja_va_from_query(url)
+    if not v:
+        try:
+            page = _yuja_fetch_text(url, cookies)
+        except requests.RequestException as e:
+            raise IngestError(f"could not open the YuJa page {host}: {e}") from e
+        v, a = _yuja_va_from_page(page)
+        if not v:
+            raise IngestError(
+                f"couldn't find a video id on that {host} page — make sure you're "
+                "logged in, or use the player's 'Copy Link' button"
+            )
+
     try:
         data = _yuja_fetch_json(base, v, a, cookies)
     except (requests.RequestException, ValueError) as e:
@@ -386,7 +420,7 @@ def fetch_transcript(url: str, ingest_cfg=None) -> TranscriptResult:
     video_id = extract_video_id(url)
     if video_id is not None:
         snippets, title = _fetch_snippets(video_id), None
-    elif yuja_params(url) is not None:
+    elif yuja_host(url) is not None:
         snippets, title = _yuja_captions(url)
     elif url.lower().startswith(("http://", "https://")):
         snippets, title = _ytdlp_captions(url, ingest_cfg)

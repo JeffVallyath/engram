@@ -215,18 +215,33 @@ def test_hls_caption_playlist_is_stitched():
 UCSC = "https://media.ucsc.edu/V/Video?isPlaying=false&v=2073423&a=1855346453&classPID=2361663&cim=true"
 
 
-def test_yuja_params_parsed():
-    scheme, host, v, a = transcript.yuja_params(UCSC)
-    assert (scheme, host, v, a) == ("https", "media.ucsc.edu", "2073423", "1855346453")
+EXTERNAL = "https://media.ucsc.edu/V/Video?isPlaying=false&startTime=6&isExternalPlayRequest=true&u=29861dc1-2654-4d34"
+
+
+def test_yuja_host_detected_for_any_v_video_link():
+    # both the ?v=&a= form and the address-bar ?u= form are YuJa
+    assert transcript.yuja_host(UCSC) == ("https", "media.ucsc.edu")
+    assert transcript.yuja_host(EXTERNAL) == ("https", "media.ucsc.edu")
+
+
+def test_yuja_va_from_query():
+    assert transcript._yuja_va_from_query(UCSC) == ("2073423", "1855346453")
+    assert transcript._yuja_va_from_query(EXTERNAL)[0] is None  # not in the url
+
+
+def test_yuja_va_from_page_reads_canonical_meta():
+    html = ('<link rel="canonical" href="https://media.ucsc.edu/V/Video?'
+            'v=2073423&amp;a=1855346453&amp;classPID=2361663" />')
+    assert transcript._yuja_va_from_page(html) == ("2073423", "1855346453")
 
 
 @pytest.mark.parametrize("url", [
     "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
     "https://uni.hosted.panopto.com/Panopto/Pages/Viewer.aspx?id=abc",
-    "https://media.ucsc.edu/V/Video?foo=bar",  # no v= id
+    "https://vimeo.com/12345",
 ])
-def test_yuja_params_rejects_non_yuja(url):
-    assert transcript.yuja_params(url) is None
+def test_yuja_host_rejects_non_yuja(url):
+    assert transcript.yuja_host(url) is None
 
 
 def test_find_caption_link_walks_nested_json():
@@ -269,6 +284,34 @@ def test_yuja_captions_end_to_end(monkeypatch):
     assert seen["caption_url"] == "https://media.ucsc.edu/P/Data/Caption/xol.vtt"
     assert r.title == "CC - Lecture Fodor 1"
     assert "[0:01] systematicity matters" in r.text
+
+
+def test_yuja_resolves_va_from_page_when_url_lacks_them(monkeypatch):
+    # the ?u= external-player link: engram must fetch the page and dig out v/a
+    from engram import cookie_bridge
+    monkeypatch.setattr(cookie_bridge, "load_cookies",
+                        lambda store=None: [{"domain": "media.ucsc.edu", "name": "s",
+                                             "value": "tok", "path": "/", "secure": True,
+                                             "hostOnly": True, "expires": 0}])
+    seen = {}
+
+    def fake_json(base, v, a, cookies):
+        seen["v"], seen["a"] = v, a
+        return {"title": "Lecture", "captionFileLink": "/P/Data/Caption/xol.vtt"}
+
+    def fake_text(url, cookies):
+        if "/P/Data/Caption" in url:
+            return "WEBVTT\n\n00:00:02.000 --> 00:00:05.000\nresolved from page\n"
+        # the page fetch: return HTML carrying the canonical v=&a= link
+        return ('<html><head><link rel="canonical" href="https://media.ucsc.edu/V/'
+                'Video?v=2073423&amp;a=1855346453&amp;cim=true" /></head></html>')
+
+    monkeypatch.setattr(transcript, "_yuja_fetch_json", fake_json)
+    monkeypatch.setattr(transcript, "_yuja_fetch_text", fake_text)
+
+    r = fetch_transcript(EXTERNAL)
+    assert seen["v"] == "2073423" and seen["a"] == "1855346453"
+    assert "[0:02] resolved from page" in r.text
 
 
 def test_yuja_captions_no_cookies_raises(monkeypatch):
